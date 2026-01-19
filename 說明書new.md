@@ -1,0 +1,591 @@
+# UI庫調用說明書
+
+## 載入函式庫
+
+```lua
+local Compkiller = loadstring(game:HttpGet("https://gist.githubusercontent.com/Tseting-nil/6b56615c647585215f380b2d77b08a26/raw/a37982c23d56b4d79511c3f0fd3ac7d7804913ef/GUI:Compkiller"))();
+
+```
+
+## 建立視窗 - 參數說明
+### new 參數
+| 參數       | 類型           | 說明                          |
+| ---------- | -------------- | ----------------------------- |
+| `Name`     | string         | 左上角顯示名稱                |
+| `Keybind`  | string         | 電腦端鍵盤快速開關UI          |
+| `Logo`     | string,Boolean | UI左上角Icon  {ID , 顯示}     |
+| `Scale`    | function       | 根據設備自動選擇UI大小 (別動) |
+| `TextSize` | number         | 自訂UI文字大小（全域）        |
+
+```lua
+local Window = Compkiller.new({
+    Name = "Compkiller UI",
+    Keybind = "LeftAlt",
+    Logo = {"rbxassetid://15307540148", true},
+    -- 根據設備自動選擇 UI 尺寸：手機用小介面，電腦/平板用大介面
+    Scale = Compkiller:_UseSmallUI() and Compkiller.Scale.Mobile or Compkiller.Scale.Window,
+    TextSize = 15,
+});
+```
+
+## 建立左側標籤類別 
+### DrawCategory 參數
+```lua
+-- 建立左側標籤類別
+Window:DrawCategory({
+    Name = "標籤名稱"
+});
+```
+
+## 建立左側標籤 - 參數說明
+### DrawTab 參數
+| 參數              | 類型    | 說明                                                              |
+| ----------------- | ------- | ----------------------------------------------------------------- |
+| `Name`            | string  | 名稱                                                              |
+| `Icon`            | string  | 名稱左邊圖示  來源:https://lucide.dev/icons                       |
+| `Type`            | string  | "Single" 建立單一選項卡之標籤 、 "Double"建立雙選項卡之標籤(預設) |
+| `EnableScrolling` | boolean | 是否啟用滾動功能（建議開啟，僅 Single 類型）                      |
+
+```lua
+-- 建立左側標籤
+local NormalTab = Window:DrawTab({
+    Name = "範例分頁",
+    Icon = "apple",
+    --Type = "Single",
+});
+```
+
+## 建立右側選項卡 - 參數說明
+### DrawSection 參數
+| 參數       | 類型    | 說明                                           |
+| ---------- | ------- | ---------------------------------------------- |
+| `Name`     | string  | 名稱                                           |
+| `Position` | string  | 左邊選項卡(left)、右邊選項卡(right)            |
+| `Canclose` | boolean | 是否顯示關閉按鈕（預設為 true 顯示，false 隱藏） |
+
+###### 注意! 建立單一選項卡之標籤 無法使用 Position 選項
+
+```lua
+-- 建立右側選項卡
+local NormalSection = NormalTab:DrawSection({
+    Name = "Section",
+    Position = 'left'
+});
+```
+
+## 建立右側容器選項卡 - 參數說明
+
+### DrawContainerTab 參數
+| 參數   | 類型   | 說明                                        |
+| ------ | ------ | ------------------------------------------- |
+| `Name` | string | 容器選項卡名稱                              |
+| `Icon` | string | 名稱左邊圖示  來源:https://lucide.dev/icons |
+
+#### 補充說明!! 在容器選項卡內建立DrawTab會是在上方
+```lua
+-- 建立右側容器選項卡
+local ContainerTab = Window:DrawContainerTab({
+	Name = "Extract Tabs",
+	Icon = "contact",
+});
+
+-- 建立上方選項卡(雙選項卡)
+local ExtractTab = ContainerTab:DrawTab({
+	Name = "Tab 1",
+	Type = "Double"
+});
+
+-- 建立上方選項卡(單一項卡)
+local SingleExtractTab = ContainerTab:DrawTab({
+	Name = "Tab 2",
+	Type = "Single",
+	EnableScrolling = true, -- 使標籤頁可以滾動（建議）
+});
+```
+
+<!-- ======================================================================= -->
+<!-- 以上為介面設置 往下為開關等功能性設置
+-->
+
+## 建立開關 - 參數說明
+#### AddToggle 參數
+| 參數          | 類型     | 必填 | 說明                             |
+| ------------- | -------- | ---- | -------------------------------- |
+| `Name`        | string   | ✓    | 開關顯示名稱                     |
+| `Default`     | boolean  | ✓    | 預設值                           |
+| `Callback`    | function | ✓    | 值改變時執行的函數               |
+| `ToggleColor` | Color3   | ✗    | 自訂開關開啟時的顏色             |
+| `Flag`        | string   | ✗    | 用於設定檔儲存的標記             |
+| `Risky`       | boolean  | ✗    | 是否為高風險功能（顯示黃色文字） |
+
+```lua
+local AutoAttackToggle = NormalSection:AddToggle({
+    Name = "自動攻擊",
+    Default = false, -- 預設關閉
+    Flag = "AutoAttack", -- 用於設定檔儲存
+    ToggleColor = Color3.fromRGB(52, 199, 89), -- 開啟時顏色（綠色）
+    Risky = true, -- 高風險功能（顯示紅色文字）
+    Callback = function(Value)
+        if Value then
+            print("自動攻擊：已開啟")
+        else
+            print("自動攻擊：已關閉")
+        end
+    end,
+})
+```
+
+## 元素連結（.Link）- 參數說明
+<figure><img src="https://2162411976-files.gitbook.io/~/files/v0/b/gitbook-x-prod.appspot.com/o/spaces%2Fu67EfmlwtAtmGvLQtoft%2Fuploads%2F1o36QgvPyJioWM7cDP6E%2Fimage.png?alt=media&#x26;token=9d4a885a-5ee6-4c8b-a3ec-ac63457311d7" alt=""><figcaption></figcaption></figure>
+連結功能適用於 **開關 滑桿 快捷鍵 顏色選擇器**
+
+### Link:AddHelper 參數
+| 參數       | 類型   | 必填 | 說明         |
+| ---------- | ------ | ---- | ------------ |
+| `Text`     | string | ✓    | 輔助說明文字 |
+| `TextSize` | number | ✗    | 文字大小     |
+
+```lua
+-- 連結輔助說明到元素
+Element.Link:AddHelper({
+    Text = "輔助說明文字",
+    TextSize = 16
+})
+```
+
+### Link:AddOption 參數
+
+<figure><img src="https://2162411976-files.gitbook.io/~/files/v0/b/gitbook-x-prod.appspot.com/o/spaces%2Fu67EfmlwtAtmGvLQtoft%2Fuploads%2FCownbqOE9C24uj0xQYwY%2Fimage.png?alt=media&#x26;token=19960847-fce3-41d2-a9ae-956f90361440" alt=""><figcaption></figcaption></figure>
+「選項」就像是「區塊」但在「元素」內，可在選項內新增更多元素。
+
+```lua
+-- 連結選項到元素
+local Option = Toggle.Link:AddOption()
+
+-- 在選項內新增開關
+Option:AddToggle({
+    Name = "選項內的開關！",
+    Default = false,
+    ToggleColor = Color3.fromRGB(255, 100, 100),
+    Callback = print
+})
+```
+
+#### AddOption 支援的元素
+
+| 元素類型    | 說明                 |
+| ----------- | -------------------- |
+| `AddToggle` | 在選項內新增開關     |
+| 其他元素    | 支援所有標準元素類型 |
+<!--
+
+### Link:AddKeybind 參數
+| 參數       | 類型     | 必填 | 說明                 |
+| ---------- | -------- | ---- | -------------------- |
+| `Default`  | string   | ✗    | 預設快捷鍵           |
+| `Flag`     | string   | ✗    | 用於設定檔儲存的標記 |
+| `Callback` | function | ✗    | 值改變時執行的函數   |
+
+```lua
+-- 連結快捷鍵到元素
+Element.Link:AddKeybind({
+    Default = "E",
+    Flag = "Option_Keybind",
+    Callback = print
+});
+```
+
+### Link:AddColorPicker 參數
+| 參數       | 類型     | 必填 | 說明                 |
+| ---------- | -------- | ---- | -------------------- |
+| `Default`  | Color3   | ✗    | 預設顏色             |
+| `Flag`     | string   | ✗    | 用於設定檔儲存的標記 |
+| `Callback` | function | ✗    | 值改變時執行的函數   |
+
+```lua
+-- 連結顏色選擇器到元素
+Element.Link:AddColorPicker({
+    Default = Color3.fromRGB(255,255,255),
+    Flag = "Color_Option",
+    Callback = print
+})
+```
+-->
+
+## 建立滑桿 - 參數說明
+#### AddSlider 參數
+| 參數       | 類型     | 必填 | 說明                       |
+| ---------- | -------- | ---- | -------------------------- |
+| `Name`     | string   | ✓    | 滑桿顯示名稱               |
+| `Min`      | number   | ✓    | 最小值                     |
+| `Max`      | number   | ✓    | 最大值                     |
+| `Default`  | number   | ✓    | 預設值（需在Min與Max之間） |
+| `Callback` | function | ✓    | 值改變時執行的函數         |
+| `Round`    | number   | ✗    | 數值精確度（小數點位數）   |
+| `Flag`     | string   | ✗    | 用於設定檔儲存的標記       |
+
+```lua
+-- 基本滑桿範例
+NormalSection:AddSlider({
+    Name = "移動速度",
+    Min = 0,
+    Max = 100,
+    Default = 50,
+    Round = 0, -- 整數，不顯示小數
+    Flag = "Slider_Example",
+    Callback = function(Value)
+        print("當前速度:", Value)
+    end
+});
+
+-- 帶小數的滑桿範例
+NormalSection:AddSlider({
+    Name = "精確控制",
+    Min = 0,
+    Max = 1,
+    Default = 0.5,
+    Round = 2, -- 保留兩位小數
+    Flag = "Precise_Slider",
+    Callback = function(Value)
+        print("精確值:", Value)
+    end
+});
+```
+
+## 建立顏色選擇器 - 參數說明
+#### AddColorPicker 參數
+| 參數       | 類型     | 必填 | 說明                 |
+| ---------- | -------- | ---- | -------------------- |
+| `Name`     | string   | ✓    | 名稱                 |
+| `Default`  | Color3   | ✓    | 預設值（Color3）     |
+| `Callback` | function | ✓    | 值改變時執行的函數   |
+| `Flag`     | string   | ✗    | 用於設定檔儲存的標記 |
+```lua
+NormalSection:AddColorPicker({
+    Name = "ColorPicker",
+    Default = Color3.fromRGB(0, 255, 140),
+    Flag = "Color_Picker_Example",
+    Callback = print
+})
+```
+
+## 建立下拉選單 - 參數說明
+#### AddDropdown 參數
+| 參數       | 類型         | 必填 | 說明                 |
+| ---------- | ------------ | ---- | -------------------- |
+| `Name`     | string       | ✓    | 名稱                 |
+| `Default`  | string       | ✓    | 文字或表格           |
+| `Multi`    | Boolean      | ✓    | 用來控制是否可以多選 |
+| `Values`   | string(list) | ✓    | 選項值               |
+| `Callback` | function     | ✓    | 值改變時執行的函數   |
+| `Flag`     | string       | ✗    | 用於設定檔儲存的標記 |
+
+```lua
+NormalSection:AddDropdown({
+    Name = "Single Dropdown",
+    Default = "Head",
+    Flag = "Single_Dropdown",
+    Values = {"Head","Body","Arms","Legs"},
+    Callback = print
+})
+
+NormalSection:AddDropdown({
+    Name = "Multi Dropdown",
+    Default = {"Head"},
+    Multi = true,
+    Flag = "Multi_Dropdown",
+    Values = {"Head","Body","Arms","Legs"},
+    Callback = print
+})
+```
+
+## 建立按鈕 - 參數說明
+#### AddButton 參數
+| 參數               | 類型     | 必填 | 說明               |
+| ------------------ | -------- | ---- | ------------------ |
+| `Name`             | string   | ✓    | 名稱               |
+| `Callback`         | function | ✓    | 值改變時執行的函數 |
+| `TextColor3`       | Color3   | ✗    | 按鈕字體顏色       |
+| `BackgroundColor3` | Color3   | ✗    | 按鈕背景顏色       |
+
+```lua
+NormalSection:AddButton({
+    Name = "完全自訂按鈕",
+    TextColor3 = Color3.fromRGB(255, 255, 255),
+    BackgroundColor3 = Color3.fromRGB(100, 50, 200),
+    Callback = function()
+        print('完全自訂按鈕被點擊!')
+    end,
+})
+```
+
+## 建立按鈕 - 參數說明
+#### AddButton 參數
+| 參數      | 類型   | 必填 | 說明                       |
+| --------- | ------ | ---- | -------------------------- |
+| `Name`    | string | ✓    | 按鈕文字                   |
+| `TextSize`| number | ✗    | 文字大小（預設12）           |
+| `Callback`| function | ✗  | 點擊回調函數               |
+
+```lua
+NormalSection:AddButton({
+    Name = "Button",
+    TextSize = 14,
+    Callback = function()
+        print("Button clicked!")
+    end
+})
+```
+
+## 建立並排按鈕 - 參數說明
+#### AddButtonRow 參數
+這個功能允許你在一行中並排顯示多個按鈕，非常適合需要將多個相關操作組合在一起的情況。
+
+| 參數      | 類型    | 必填 | 說明                   |
+| --------- | ------- | ---- | ---------------------- |
+| `Buttons` | {table} | ✓    | 按鈕配置陣列           |
+
+#### Buttons 陣列中每個按鈕的參數
+| 參數                | 類型     | 必填 | 說明                       |
+| ------------------- | -------- | ---- | -------------------------- |
+| `Name`              | string   | ✓    | 按鈕文字                   |
+| `TextColor3`        | Color3   | ✗    | 文字顏色（預設使用主題顏色） |
+| `BackgroundColor3`  | Color3   | ✗    | 背景顏色（預設使用主題顏色） |
+| `TextSize`          | number   | ✗    | 文字大小（預設12）           |
+| `Callback`          | function | ✗    | 點擊回調函數               |
+
+```lua
+-- 2個按鈕並排
+NormalSection:AddButtonRow({
+    Buttons = {
+        {
+            Name = "按鈕 1",
+            BackgroundColor3 = Color3.fromRGB(255, 100, 100),
+            Callback = function()
+                print("按鈕 1")
+            end
+        },
+        {
+            Name = "按鈕 2",
+            BackgroundColor3 = Color3.fromRGB(100, 255, 100),
+            Callback = function()
+                print("按鈕 2")
+            end
+        }
+    }
+})
+
+-- 3個按鈕並排
+NormalSection:AddButtonRow({
+    Buttons = {
+        {
+            Name = "Yes",
+            TextColor3 = Color3.fromRGB(255, 255, 255),
+            BackgroundColor3 = Color3.fromRGB(34, 197, 94),
+            TextSize = 14,
+            Callback = function()
+                print("確認")
+            end
+        },
+        {
+            Name = "No",
+            TextColor3 = Color3.fromRGB(255, 255, 255),
+            BackgroundColor3 = Color3.fromRGB(239, 68, 68),
+            TextSize = 14,
+            Callback = function()
+                print("取消")
+            end
+        },
+        {
+            Name = "Maybe",
+            TextColor3 = Color3.fromRGB(0, 0, 0),
+            BackgroundColor3 = Color3.fromRGB(250, 204, 21),
+            TextSize = 14,
+            Callback = function()
+                print("不確定")
+            end
+        }
+    }
+})
+```
+
+## 建立標籤文字 - 參數說明
+#### AddLabel 參數
+| 參數       | 類型    | 必填 | 說明                                      |
+| ---------- | ------- | ---- | ----------------------------------------- |
+| `Text`     | string  | ✓    | 顯示的文字內容                            |
+| `Color`    | Color3  | ✗    | 文字顏色（預設使用主題顏色）              |
+| `TextSize` | number  | ✗    | 文字大小（預設14）                        |
+| `RichText` | boolean | ✗    | 是否啟用富文本（支援粗體、斜體等，預設啟用） |
+
+```lua
+-- 基本用法
+NormalSection:AddLabel({
+    Text = "這是一個簡單的標籤"
+})
+
+-- 自訂顏色和大小
+local myLabel = NormalSection:AddLabel({
+    Text = "這是紅色的標籤",
+    Color = Color3.fromRGB(255, 100, 100),
+    TextSize = 16
+})
+
+-- 使用富文本
+NormalSection:AddLabel({
+    Text = "<b>粗體</b> 和 <i>斜體</i>",
+    Color = Color3.fromRGB(100, 200, 255),
+    RichText = true
+})
+
+-- 動態更新
+myLabel:SetText("更新的文字")
+myLabel:SetColor(Color3.fromRGB(0, 255, 0))
+myLabel:SetTextSize(18)
+```
+
+#### AddLabel 方法
+| 方法              | 參數          | 說明         |
+| ----------------- | ------------- | ------------ |
+| `SetText(text)`   | string        | 更新文字內容 |
+| `SetColor(color)` | Color3        | 更改文字顏色 |
+| `SetTextSize(size)` | number      | 調整文字大小 |
+
+## 建立段落文字 - 參數說明
+#### AddParagraph 參數
+| 參數          | 類型   | 必填 | 說明                   |
+| ------------- | ------ | ---- | ---------------------- |
+| `Title`       | string | ✓    | 標題(大字體)           |
+| `Content`     | string 或 {string} | ✗    | 內文(小字體)，支援字串或字串表格 |
+| `TitleSize`   | number | ✗    | 標題文字大小(預設14)   |
+| `ContentSize` | number | ✗    | 內文文字大小(預設13)   || `Spacing`     | number | ✗    | 內容間隔(預設15)         |
+```lua
+-- 基本用法
+NormalSection:AddParagraph({
+    Title = "Paragraph",
+    Content = "Very cool paragraph"
+})
+
+-- 使用表格傳入多行內容
+NormalSection:AddParagraph({
+    Title = "多行段落",
+    Content = {
+        "第一行內容",
+        "第二行內容",
+        "第三行內容"
+    }
+})
+
+-- 自訂文字大小
+NormalSection:AddParagraph({
+    Title = "大標題",
+    Content = {
+        "內容行 1",
+        "內容行 2"
+    },
+    TitleSize = 16,
+    ContentSize = 14
+})
+
+-- 自訂間隔
+NormalSection:AddParagraph({
+    Title = "大行間距段落",
+    Content = {
+        "第一行",
+        "第二行",
+        "第三行"
+    },
+    Spacing = 1.5  -- 增加行間距至 1.5 倍
+})
+```
+
+<!--= ->
+<!-- 額外功能
+= -->
+
+## 建立配置管理器 - 參數說明
+
+### ConfigManager 參數
+| 參數        | 類型   | 必填 | 說明             |
+| ----------- | ------ | ---- | ---------------- |
+| `Directory` | string | ✓    | 工作區中的資料夾 |
+| `Config`    | string | ✓    | 腳本的設定資料夾 |
+
+```lua
+-- 建立配置管理器
+local ConfigManager = Compkiller:ConfigManager({
+    Directory = "Compkiller-UI",
+    Config = "Example-Configs",
+});
+```
+
+### 配置管理器功能
+
+#### 寫入設定
+將當前數值寫入設定檔
+
+```lua
+ConfigManager:WriteConfig({
+    Name = "設定名稱",
+    Author = "建立者名稱"
+})
+```
+
+#### 讀取資訊
+讀取設定檔資訊，例如：建立者名稱和建立日期
+
+```lua
+ConfigManager:ReadInfo("<設定名稱>")
+```
+
+#### 載入設定
+載入目錄中的設定檔
+
+```lua
+ConfigManager:LoadConfig("<設定名稱>")
+```
+
+#### 刪除設定
+刪除目錄中的設定檔
+
+```lua
+ConfigManager:DeleteConfig("<設定名稱>")
+```
+
+#### 取得所有設定
+取得目錄中的所有設定檔
+
+```lua
+ConfigManager:GetConfigs()
+```
+
+#### 目錄路徑
+設定檔目錄路徑
+
+```lua
+ConfigManager.Directory
+```
+
+## 建立設定分頁 - 參數說明
+
+### DrawConfig 參數
+| 參數     | 類型   | 必填 | 說明                                                    |
+| -------- | ------ | ---- | ------------------------------------------------------- |
+| `Name`   | string | ✓    | 設定分頁名稱                                            |
+| `Icon`   | string | ✓    | 名稱左邊圖示  來源:https://lucide.dev/icons             |
+| `Config` | object | ✓    | 設定管理器物件（使用 `ConfigManager` 建立的管理器物件） |
+
+```lua
+-- 建立設定分頁
+local ConfigUI = Window:DrawConfig({
+    Name = "設定",
+    Icon = "folder",
+    Config = ConfigManager, -- 設定管理器（必填）
+});
+
+-- 初始化設定介面
+ConfigUI:Init();
+```
+
+<figure><img src="https://2162411976-files.gitbook.io/~/files/v0/b/gitbook-x-prod.appspot.com/o/spaces%2Fu67EfmlwtAtmGvLQtoft%2Fuploads%2FVtNqgtwn3s9HPdsPq6NT%2Fimage.png?alt=media&#x26;token=0b0e53b5-928b-4385-920f-d8e1a549ea8f" alt=""><figcaption><p>設定分頁預覽</p></figcaption></figure>
+

@@ -1,0 +1,1392 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UI庫調用說明書 - Compkiller UI</title>
+    <!-- Syntax Highlighting -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/lua.min.js"></script>
+    <script>hljs.highlightAll();</script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --bg-primary: #1e1e1e;
+            --bg-secondary: #252526;
+            --bg-tertiary: #333333;
+            --text-primary: #e0e0e0;
+            --text-secondary: #aaaaaa;
+            --accent-color: #34c759;
+            --accent-hover: #2db34e;
+            --border-color: #3e3e42;
+            --code-bg: #282c34;
+            --table-header-bg: #2d2d30;
+            --table-border: #454545;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 280px;
+            background-color: var(--bg-secondary);
+            border-right: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            flex-shrink: 0;
+            transition: transform 0.3s ease;
+        }
+
+        .sidebar-header {
+            padding: 20px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .sidebar-header h1 {
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: var(--accent-color);
+        }
+
+        .sidebar-nav {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px 0;
+        }
+
+        .sidebar-nav ul {
+            list-style: none;
+        }
+
+        .sidebar-nav li a {
+            display: block;
+            padding: 8px 24px;
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 0.9rem;
+            transition: all 0.2s;
+            border-left: 3px solid transparent;
+        }
+
+        .sidebar-nav li a:hover, .sidebar-nav li a.active {
+            background-color: var(--bg-tertiary);
+            color: var(--text-primary);
+        }
+
+        .sidebar-nav li a.active {
+            border-left-color: var(--accent-color);
+        }
+
+        .sidebar-nav h3 {
+            padding: 16px 24px 8px;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-secondary);
+            opacity: 0.7;
+        }
+
+        /* Main Content */
+        .main-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 40px;
+            scroll-behavior: smooth;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        /* Typography */
+        h1, h2, h3, h4, h5, h6 {
+            color: var(--text-primary);
+            margin-bottom: 16px;
+            margin-top: 32px;
+            font-weight: 600;
+        }
+
+        h1 { font-size: 2.5rem; margin-top: 0; border-bottom: 2px solid var(--border-color); padding-bottom: 10px; }
+        h2 { font-size: 1.8rem; border-bottom: 1px solid var(--border-color); padding-bottom: 8px; }
+        h3 { font-size: 1.4rem; }
+        h4 { font-size: 1.2rem; }
+        h6 { font-size: 0.9rem; color: #ffeb3b; background: rgba(255, 235, 59, 0.1); padding: 8px; border-radius: 4px; display: inline-block;}
+
+        p { margin-bottom: 16px; }
+
+        a { color: var(--accent-color); text-decoration: none; }
+        a:hover { text-decoration: underline; }
+
+        /* Code Blocks */
+        pre {
+            background-color: var(--code-bg);
+            border-radius: 8px;
+            padding: 16px;
+            overflow-x: auto;
+            margin-bottom: 20px;
+            border: 1px solid var(--border-color);
+        }
+
+        code {
+            font-family: 'JetBrains Mono', Consolas, Monaco, 'Andale Mono', monospace;
+            font-size: 0.9rem;
+        }
+
+        p > code, li > code, td > code {
+            background-color: var(--bg-tertiary);
+            padding: 2px 6px;
+            border-radius: 4px;
+            color: #d19a66;
+        }
+
+        /* Tables */
+        .table-container {
+            overflow-x: auto;
+            margin-bottom: 24px;
+            border-radius: 8px;
+            border: 1px solid var(--table-border);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.95rem;
+            background-color: var(--bg-secondary);
+        }
+
+        th, td {
+            padding: 12px 16px;
+            text-align: left;
+            border-bottom: 1px solid var(--table-border);
+        }
+
+        th {
+            background-color: var(--table-header-bg);
+            font-weight: 600;
+        }
+
+        tr:last-child td { border-bottom: none; }
+        tr:hover { background-color: var(--bg-tertiary); }
+
+        /* Images */
+        figure {
+            margin: 24px 0;
+            text-align: center;
+        }
+        
+        img {
+            max-width: 100%;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+        }
+
+        figcaption {
+            margin-top: 8px;
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+        }
+
+        /* Mobile Utility */
+        .mobile-menu-btn {
+            display: none;
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            z-index: 1000;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            padding: 8px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        @media (max-width: 768px) {
+            .sidebar {
+                position: fixed;
+                height: 100%;
+                z-index: 999;
+                transform: translateX(-100%);
+            }
+
+            .sidebar.open {
+                transform: translateX(0);
+            }
+
+            .mobile-menu-btn {
+                display: block;
+            }
+
+            .main-content {
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <button class="mobile-menu-btn" onclick="toggleSidebar()">☰ MENU</button>
+
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <h1>Compkiller UI</h1>
+        </div>
+        <nav class="sidebar-nav">
+            <ul>
+                <li><a href="#intro" class="active">UI庫調用說明書</a></li>
+                <li><a href="#load-lib">載入函式庫</a></li>
+                <li><h3>視窗與標籤</h3></li>
+                <li><a href="#create-window">建立視窗</a></li>
+                <li><a href="#create-category">建立左側標籤類別</a></li>
+                <li><a href="#create-tab">建立左側標籤</a></li>
+                <li><a href="#create-section">建立右側選項卡</a></li>
+                <li><a href="#create-container">建立右側容器選項卡</a></li>
+                <li><h3>功能與元素</h3></li>
+                <li><a href="#add-toggle">建立開關</a></li>
+                <li><a href="#element-link">元素連結 (.Link)</a></li>
+                <li><a href="#add-slider">建立滑桿</a></li>
+                <li><a href="#add-colorpicker">建立顏色選擇器</a></li>
+                <li><a href="#add-dropdown">建立下拉選單</a></li>
+                <li><a href="#add-button">建立按鈕</a></li>
+                <li><a href="#add-button-row">建立並排按鈕</a></li>
+                <li><a href="#add-label">建立標籤文字</a></li>
+                <li><a href="#add-paragraph">建立段落文字</a></li>
+                <li><h3>設定管理</h3></li>
+                <li><a href="#config-manager">建立配置管理器</a></li>
+                <li><a href="#config-functions">配置管理器功能</a></li>
+                <li><a href="#draw-config">建立設定分頁</a></li>
+            </ul>
+        </nav>
+    </aside>
+
+    <main class="main-content">
+        <div class="container">
+            
+            <section id="intro">
+                <h1>UI庫調用說明書</h1>
+            </section>
+
+            <section id="load-lib">
+                <h2>載入函式庫</h2>
+                <pre><code class="language-lua">local Compkiller = loadstring(game:HttpGet("https://gist.githubusercontent.com/Tseting-nil/6b56615c647585215f380b2d77b08a26/raw/a37982c23d56b4d79511c3f0fd3ac7d7804913ef/GUI:Compkiller"))();
+</code></pre>
+            </section>
+
+            <section id="create-window">
+                <h2>建立視窗 - 參數說明</h2>
+                <h3>new 參數</h3>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>參數</th>
+                                <th>類型</th>
+                                <th>說明</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><code>Name</code></td>
+                                <td>string</td>
+                                <td>左上角顯示名稱</td>
+                            </tr>
+                            <tr>
+                                <td><code>Keybind</code></td>
+                                <td>string</td>
+                                <td>電腦端鍵盤快速開關UI</td>
+                            </tr>
+                            <tr>
+                                <td><code>Logo</code></td>
+                                <td>string,Boolean</td>
+                                <td>UI左上角Icon {ID , 顯示}</td>
+                            </tr>
+                            <tr>
+                                <td><code>Scale</code></td>
+                                <td>function</td>
+                                <td>根據設備自動選擇UI大小 (別動)</td>
+                            </tr>
+                            <tr>
+                                <td><code>TextSize</code></td>
+                                <td>number</td>
+                                <td>自訂UI文字大小（全域）</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <pre><code class="language-lua">local Window = Compkiller.new({
+    Name = "Compkiller UI",
+    Keybind = "LeftAlt",
+    Logo = {"rbxassetid://15307540148", true},
+    -- 根據設備自動選擇 UI 尺寸：手機用小介面，電腦/平板用大介面
+    Scale = Compkiller:_UseSmallUI() and Compkiller.Scale.Mobile or Compkiller.Scale.Window,
+    TextSize = 15,
+});
+</code></pre>
+            </section>
+
+            <section id="create-category">
+                <h2>建立左側標籤類別</h2>
+                <h3>DrawCategory 參數</h3>
+                <pre><code class="language-lua">-- 建立左側標籤類別
+Window:DrawCategory({
+    Name = "標籤名稱"
+});
+</code></pre>
+            </section>
+
+            <section id="create-tab">
+                <h2>建立左側標籤 - 參數說明</h2>
+                <h3>DrawTab 參數</h3>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>參數</th>
+                                <th>類型</th>
+                                <th>說明</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><code>Name</code></td>
+                                <td>string</td>
+                                <td>名稱</td>
+                            </tr>
+                            <tr>
+                                <td><code>Icon</code></td>
+                                <td>string</td>
+                                <td>名稱左邊圖示 來源:<a href="https://lucide.dev/icons">lucide.dev/icons</a></td>
+                            </tr>
+                            <tr>
+                                <td><code>Type</code></td>
+                                <td>string</td>
+                                <td>"Single" 建立單一選項卡之標籤 、 "Double"建立雙選項卡之標籤(預設)</td>
+                            </tr>
+                            <tr>
+                                <td><code>EnableScrolling</code></td>
+                                <td>boolean</td>
+                                <td>是否啟用滾動功能（建議開啟，僅 Single 類型）</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <pre><code class="language-lua">-- 建立左側標籤
+local NormalTab = Window:DrawTab({
+    Name = "範例分頁",
+    Icon = "apple",
+    --Type = "Single",
+});
+</code></pre>
+            </section>
+
+            <section id="create-section">
+                <h2>建立右側選項卡 - 參數說明</h2>
+                <h3>DrawSection 參數</h3>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>參數</th>
+                                <th>類型</th>
+                                <th>說明</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><code>Name</code></td>
+                                <td>string</td>
+                                <td>名稱</td>
+                            </tr>
+                            <tr>
+                                <td><code>Position</code></td>
+                                <td>string</td>
+                                <td>左邊選項卡(left)、右邊選項卡(right)</td>
+                            </tr>
+                            <tr>
+                                <td><code>Canclose</code></td>
+                                <td>boolean</td>
+                                <td>是否顯示關閉按鈕（預設為 true 顯示，false 隱藏）</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <h6>注意! 建立單一選項卡之標籤 無法使用 Position 選項</h6>
+
+                <pre><code class="language-lua">-- 建立右側選項卡
+local NormalSection = NormalTab:DrawSection({
+    Name = "Section",
+    Position = 'left'
+});
+</code></pre>
+            </section>
+
+            <section id="create-container">
+                <h2>建立右側容器選項卡 - 參數說明</h2>
+                <h3>DrawContainerTab 參數</h3>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>參數</th>
+                                <th>類型</th>
+                                <th>說明</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><code>Name</code></td>
+                                <td>string</td>
+                                <td>容器選項卡名稱</td>
+                            </tr>
+                            <tr>
+                                <td><code>Icon</code></td>
+                                <td>string</td>
+                                <td>名稱左邊圖示 來源:<a href="https://lucide.dev/icons">lucide.dev/icons</a></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <h4>補充說明!! 在容器選項卡內建立DrawTab會是在上方</h4>
+                <pre><code class="language-lua">-- 建立右側容器選項卡
+local ContainerTab = Window:DrawContainerTab({
+	Name = "Extract Tabs",
+	Icon = "contact",
+});
+
+-- 建立上方選項卡(雙選項卡)
+local ExtractTab = ContainerTab:DrawTab({
+	Name = "Tab 1",
+	Type = "Double"
+});
+
+-- 建立上方選項卡(單一項卡)
+local SingleExtractTab = ContainerTab:DrawTab({
+	Name = "Tab 2",
+	Type = "Single",
+	EnableScrolling = true, -- 使標籤頁可以滾動（建議）
+});
+</code></pre>
+            </section>
+
+            <hr style="border: 0; border-top: 2px solid var(--border-color); margin: 40px 0;">
+
+            <section id="add-toggle">
+                <h2>建立開關 - 參數說明</h2>
+                <h4>AddToggle 參數</h4>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>參數</th>
+                                <th>類型</th>
+                                <th>必填</th>
+                                <th>說明</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><code>Name</code></td>
+                                <td>string</td>
+                                <td>✓</td>
+                                <td>開關顯示名稱</td>
+                            </tr>
+                            <tr>
+                                <td><code>Default</code></td>
+                                <td>boolean</td>
+                                <td>✓</td>
+                                <td>預設值</td>
+                            </tr>
+                            <tr>
+                                <td><code>Callback</code></td>
+                                <td>function</td>
+                                <td>✓</td>
+                                <td>值改變時執行的函數</td>
+                            </tr>
+                            <tr>
+                                <td><code>ToggleColor</code></td>
+                                <td>Color3</td>
+                                <td>✗</td>
+                                <td>自訂開關開啟時的顏色</td>
+                            </tr>
+                            <tr>
+                                <td><code>Flag</code></td>
+                                <td>string</td>
+                                <td>✗</td>
+                                <td>用於設定檔儲存的標記</td>
+                            </tr>
+                            <tr>
+                                <td><code>Risky</code></td>
+                                <td>boolean</td>
+                                <td>✗</td>
+                                <td>是否為高風險功能（顯示黃色文字）</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <pre><code class="language-lua">local AutoAttackToggle = NormalSection:AddToggle({
+    Name = "自動攻擊",
+    Default = false, -- 預設關閉
+    Flag = "AutoAttack", -- 用於設定檔儲存
+    ToggleColor = Color3.fromRGB(52, 199, 89), -- 開啟時顏色（綠色）
+    Risky = true, -- 高風險功能（顯示紅色文字）
+    Callback = function(Value)
+        if Value then
+            print("自動攻擊：已開啟")
+        else
+            print("自動攻擊：已關閉")
+        end
+    end,
+})
+</code></pre>
+            </section>
+
+            <section id="element-link">
+                <h2>元素連結（.Link）- 參數說明</h2>
+                <figure>
+                    <img src="https://2162411976-files.gitbook.io/~/files/v0/b/gitbook-x-prod.appspot.com/o/spaces%2Fu67EfmlwtAtmGvLQtoft%2Fuploads%2F1o36QgvPyJioWM7cDP6E%2Fimage.png?alt=media&token=9d4a885a-5ee6-4c8b-a3ec-ac63457311d7" alt="Link Example">
+                    <figcaption>元素連結範例</figcaption>
+                </figure>
+                <p>連結功能適用於 <strong><a href="#add-toggle">開關</a> <a href="#add-slider">滑桿</a> 快捷鍵 <a href="#add-colorpicker">顏色選擇器</a></strong></p>
+
+                <h3>Link:AddHelper 參數</h3>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>參數</th>
+                                <th>類型</th>
+                                <th>必填</th>
+                                <th>說明</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><code>Text</code></td>
+                                <td>string</td>
+                                <td>✓</td>
+                                <td>輔助說明文字</td>
+                            </tr>
+                            <tr>
+                                <td><code>TextSize</code></td>
+                                <td>number</td>
+                                <td>✗</td>
+                                <td>文字大小</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <pre><code class="language-lua">-- 連結輔助說明到元素
+Element.Link:AddHelper({
+    Text = "輔助說明文字",
+    TextSize = 16
+})
+</code></pre>
+
+                <h3>Link:AddOption 參數</h3>
+                <figure>
+                    <img src="https://2162411976-files.gitbook.io/~/files/v0/b/gitbook-x-prod.appspot.com/o/spaces%2Fu67EfmlwtAtmGvLQtoft%2Fuploads%2FCownbqOE9C24uj0xQYwY%2Fimage.png?alt=media&token=19960847-fce3-41d2-a9ae-956f90361440" alt="Option Example">
+                </figure>
+                <p>「選項」就像是「區塊」但在「元素」內，可在選項內新增更多元素。</p>
+
+                <pre><code class="language-lua">-- 連結選項到元素
+local Option = Toggle.Link:AddOption()
+
+-- 在選項內新增開關
+Option:AddToggle({
+    Name = "選項內的開關！",
+    Default = false,
+    ToggleColor = Color3.fromRGB(255, 100, 100),
+    Callback = print
+})
+</code></pre>
+
+                <h4>AddOption 支援的元素</h4>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>元素類型</th>
+                                <th>說明</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><code>AddToggle</code></td>
+                                <td>在選項內新增<a href="#add-toggle">開關</a></td>
+                            </tr>
+                            <tr>
+                                <td>其他元素</td>
+                                <td>支援所有標準元素類型</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section id="add-slider">
+                <h2>建立滑桿 - 參數說明</h2>
+                <h4>AddSlider 參數</h4>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>參數</th>
+                                <th>類型</th>
+                                <th>必填</th>
+                                <th>說明</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><code>Name</code></td>
+                                <td>string</td>
+                                <td>✓</td>
+                                <td>滑桿顯示名稱</td>
+                            </tr>
+                            <tr>
+                                <td><code>Min</code></td>
+                                <td>number</td>
+                                <td>✓</td>
+                                <td>最小值</td>
+                            </tr>
+                            <tr>
+                                <td><code>Max</code></td>
+                                <td>number</td>
+                                <td>✓</td>
+                                <td>最大值</td>
+                            </tr>
+                            <tr>
+                                <td><code>Default</code></td>
+                                <td>number</td>
+                                <td>✓</td>
+                                <td>預設值（需在Min與Max之間）</td>
+                            </tr>
+                            <tr>
+                                <td><code>Callback</code></td>
+                                <td>function</td>
+                                <td>✓</td>
+                                <td>值改變時執行的函數</td>
+                            </tr>
+                            <tr>
+                                <td><code>Round</code></td>
+                                <td>number</td>
+                                <td>✗</td>
+                                <td>數值精確度（小數點位數）</td>
+                            </tr>
+                            <tr>
+                                <td><code>Flag</code></td>
+                                <td>string</td>
+                                <td>✗</td>
+                                <td>用於設定檔儲存的標記</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <pre><code class="language-lua">-- 基本滑桿範例
+NormalSection:AddSlider({
+    Name = "移動速度",
+    Min = 0,
+    Max = 100,
+    Default = 50,
+    Round = 0, -- 整數，不顯示小數
+    Flag = "Slider_Example",
+    Callback = function(Value)
+        print("當前速度:", Value)
+    end
+});
+
+-- 帶小數的滑桿範例
+NormalSection:AddSlider({
+    Name = "精確控制",
+    Min = 0,
+    Max = 1,
+    Default = 0.5,
+    Round = 2, -- 保留兩位小數
+    Flag = "Precise_Slider",
+    Callback = function(Value)
+        print("精確值:", Value)
+    end
+});
+</code></pre>
+            </section>
+
+            <section id="add-colorpicker">
+                <h2>建立顏色選擇器 - 參數說明</h2>
+                <h4>AddColorPicker 參數</h4>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>參數</th>
+                                <th>類型</th>
+                                <th>必填</th>
+                                <th>說明</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><code>Name</code></td>
+                                <td>string</td>
+                                <td>✓</td>
+                                <td>名稱</td>
+                            </tr>
+                            <tr>
+                                <td><code>Default</code></td>
+                                <td>Color3</td>
+                                <td>✓</td>
+                                <td>預設值（Color3）</td>
+                            </tr>
+                            <tr>
+                                <td><code>Callback</code></td>
+                                <td>function</td>
+                                <td>✓</td>
+                                <td>值改變時執行的函數</td>
+                            </tr>
+                            <tr>
+                                <td><code>Flag</code></td>
+                                <td>string</td>
+                                <td>✗</td>
+                                <td>用於設定檔儲存的標記</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <pre><code class="language-lua">NormalSection:AddColorPicker({
+    Name = "ColorPicker",
+    Default = Color3.fromRGB(0, 255, 140),
+    Flag = "Color_Picker_Example",
+    Callback = print
+})
+</code></pre>
+            </section>
+
+            <section id="add-dropdown">
+                <h2>建立下拉選單 - 參數說明</h2>
+                <h4>AddDropdown 參數</h4>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>參數</th>
+                                <th>類型</th>
+                                <th>必填</th>
+                                <th>說明</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><code>Name</code></td>
+                                <td>string</td>
+                                <td>✓</td>
+                                <td>名稱</td>
+                            </tr>
+                            <tr>
+                                <td><code>Default</code></td>
+                                <td>string</td>
+                                <td>✓</td>
+                                <td>文字或表格（若是多選）</td>
+                            </tr>
+                            <tr>
+                                <td><code>Multi</code></td>
+                                <td>Boolean</td>
+                                <td>✓</td>
+                                <td>用來控制是否可以多選</td>
+                            </tr>
+                            <tr>
+                                <td><code>Values</code></td>
+                                <td>string(list)</td>
+                                <td>✓</td>
+                                <td>選項值</td>
+                            </tr>
+                            <tr>
+                                <td><code>Callback</code></td>
+                                <td>function</td>
+                                <td>✓</td>
+                                <td>值改變時執行的函數</td>
+                            </tr>
+                            <tr>
+                                <td><code>Flag</code></td>
+                                <td>string</td>
+                                <td>✗</td>
+                                <td>用於設定檔儲存的標記</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <pre><code class="language-lua">NormalSection:AddDropdown({
+    Name = "Single Dropdown",
+    Default = "Head",
+    Flag = "Single_Dropdown",
+    Values = {"Head","Body","Arms","Legs"},
+    Callback = print
+})
+
+NormalSection:AddDropdown({
+    Name = "Multi Dropdown",
+    Default = {"Head"},
+    Multi = true,
+    Flag = "Multi_Dropdown",
+    Values = {"Head","Body","Arms","Legs"},
+    Callback = print
+})
+</code></pre>
+            </section>
+
+            <section id="add-button">
+                <h2>建立按鈕 - 參數說明</h2>
+                <h4>AddButton 參數</h4>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>參數</th>
+                                <th>類型</th>
+                                <th>必填</th>
+                                <th>說明</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><code>Name</code></td>
+                                <td>string</td>
+                                <td>✓</td>
+                                <td>名稱</td>
+                            </tr>
+                            <tr>
+                                <td><code>TextSize</code></td>
+                                <td>number</td>
+                                <td>✗</td>
+                                <td>文字大小（預設12）</td>
+                            </tr>
+                            <tr>
+                                <td><code>Callback</code></td>
+                                <td>function</td>
+                                <td>✓</td>
+                                <td>值改變時執行的函數</td>
+                            </tr>
+                            <tr>
+                                <td><code>TextColor3</code></td>
+                                <td>Color3</td>
+                                <td>✗</td>
+                                <td>按鈕字體顏色</td>
+                            </tr>
+                            <tr>
+                                <td><code>BackgroundColor3</code></td>
+                                <td>Color3</td>
+                                <td>✗</td>
+                                <td>按鈕背景顏色</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <pre><code class="language-lua">NormalSection:AddButton({
+    Name = "完全自訂按鈕",
+    TextColor3 = Color3.fromRGB(255, 255, 255),
+    BackgroundColor3 = Color3.fromRGB(100, 50, 200),
+    Callback = function()
+        print('完全自訂按鈕被點擊!')
+    end,
+})
+</code></pre>
+            </section>
+
+            <section id="add-button-row">
+                <h2>建立並排按鈕 - 參數說明</h2>
+                <p style="margin-bottom: 20px; color: var(--text-secondary);">
+                    這個功能允許你在一行中並排顯示多個按鈕，非常適合需要將多個相關操作組合在一起的情況。
+                </p>
+                <h4>AddButtonRow 參數</h4>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>參數</th>
+                                <th>類型</th>
+                                <th>必填</th>
+                                <th>說明</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><code>Buttons</code></td>
+                                <td>{table}</td>
+                                <td>✓</td>
+                                <td>按鈕配置陣列</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <h4>Buttons 陣列中每個按鈕的參數</h4>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>參數</th>
+                                <th>類型</th>
+                                <th>必填</th>
+                                <th>說明</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><code>Name</code></td>
+                                <td>string</td>
+                                <td>✓</td>
+                                <td>按鈕文字</td>
+                            </tr>
+                            <tr>
+                                <td><code>TextColor3</code></td>
+                                <td>Color3</td>
+                                <td>✗</td>
+                                <td>文字顏色（預設使用主題顏色）</td>
+                            </tr>
+                            <tr>
+                                <td><code>BackgroundColor3</code></td>
+                                <td>Color3</td>
+                                <td>✗</td>
+                                <td>背景顏色（預設使用主題顏色）</td>
+                            </tr>
+                            <tr>
+                                <td><code>TextSize</code></td>
+                                <td>number</td>
+                                <td>✗</td>
+                                <td>文字大小（預設12）</td>
+                            </tr>
+                            <tr>
+                                <td><code>Callback</code></td>
+                                <td>function</td>
+                                <td>✗</td>
+                                <td>點擊回調函數</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <pre><code class="language-lua">-- 2個按鈕並排
+NormalSection:AddButtonRow({
+    Buttons = {
+        {
+            Name = "按鈕 1",
+            BackgroundColor3 = Color3.fromRGB(255, 100, 100),
+            Callback = function()
+                print("按鈕 1")
+            end
+        },
+        {
+            Name = "按鈕 2",
+            BackgroundColor3 = Color3.fromRGB(100, 255, 100),
+            Callback = function()
+                print("按鈕 2")
+            end
+        }
+    }
+})
+
+-- 3個按鈕並排
+NormalSection:AddButtonRow({
+    Buttons = {
+        {
+            Name = "Yes",
+            TextColor3 = Color3.fromRGB(255, 255, 255),
+            BackgroundColor3 = Color3.fromRGB(34, 197, 94),
+            Callback = function()
+                print("確認")
+            end
+        },
+        {
+            Name = "No",
+            TextColor3 = Color3.fromRGB(255, 255, 255),
+            BackgroundColor3 = Color3.fromRGB(239, 68, 68),
+            Callback = function()
+                print("取消")
+            end
+        },
+        {
+            Name = "Maybe",
+            TextColor3 = Color3.fromRGB(0, 0, 0),
+            BackgroundColor3 = Color3.fromRGB(250, 204, 21),
+            Callback = function()
+                print("不確定")
+            end
+        }
+    }
+})
+</code></pre>
+            </section>
+
+            <section id="add-label">
+                <h2>建立標籤文字 - 參數說明</h2>
+                <h4>AddLabel 參數</h4>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>參數</th>
+                                <th>類型</th>
+                                <th>必填</th>
+                                <th>說明</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><code>Text</code></td>
+                                <td>string</td>
+                                <td>✓</td>
+                                <td>顯示的文字內容</td>
+                            </tr>
+                            <tr>
+                                <td><code>Color</code></td>
+                                <td>Color3</td>
+                                <td>✗</td>
+                                <td>文字顏色（預設使用主題顏色）</td>
+                            </tr>
+                            <tr>
+                                <td><code>TextSize</code></td>
+                                <td>number</td>
+                                <td>✗</td>
+                                <td>文字大小（預設14）</td>
+                            </tr>
+                            <tr>
+                                <td><code>RichText</code></td>
+                                <td>boolean</td>
+                                <td>✗</td>
+                                <td>是否啟用富文本（支援粗體、斜體等，預設啟用）</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <pre><code class="language-lua">-- 基本用法
+NormalSection:AddLabel({
+    Text = "這是一個簡單的標籤"
+})
+
+-- 自訂顏色和大小
+local myLabel = NormalSection:AddLabel({
+    Text = "這是紅色的標籤",
+    Color = Color3.fromRGB(255, 100, 100),
+    TextSize = 16
+})
+
+-- 使用富文本
+NormalSection:AddLabel({
+    Text = "&lt;b&gt;粗體&lt;/b&gt; 和 &lt;i&gt;斜體&lt;/i&gt;",
+    Color = Color3.fromRGB(100, 200, 255),
+    RichText = true
+})
+
+-- 動態更新
+myLabel:SetText("更新的文字")
+myLabel:SetColor(Color3.fromRGB(0, 255, 0))
+myLabel:SetTextSize(18)
+</code></pre>
+
+                <h4>AddLabel 方法</h4>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>方法</th>
+                                <th>參數</th>
+                                <th>說明</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><code>SetText(text)</code></td>
+                                <td>string</td>
+                                <td>更新文字內容</td>
+                            </tr>
+                            <tr>
+                                <td><code>SetColor(color)</code></td>
+                                <td>Color3</td>
+                                <td>更改文字顏色</td>
+                            </tr>
+                            <tr>
+                                <td><code>SetTextSize(size)</code></td>
+                                <td>number</td>
+                                <td>調整文字大小</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section id="add-paragraph">
+                <h2>建立段落文字 - 參數說明</h2>
+                <h4>AddParagraph 參數</h4>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>參數</th>
+                                <th>類型</th>
+                                <th>必填</th>
+                                <th>說明</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><code>Title</code></td>
+                                <td>string</td>
+                                <td>✓</td>
+                                <td>標題(大字體)</td>
+                            </tr>
+                            <tr>
+                                <td><code>Content</code></td>
+                                <td>string 或 {string}</td>
+                                <td>✗</td>
+                                <td>內文(小字體)，支援字串或字串表格</td>
+                            </tr>
+                            <tr>
+                                <td><code>TitleSize</code></td>
+                                <td>number</td>
+                                <td>✗</td>
+                                <td>標題文字大小(預設16)</td>
+                            </tr>
+                            <tr>
+                                <td><code>ContentSize</code></td>
+                                <td>number</td>
+                                <td>✗</td>
+                                <td>內文文字大小(預設14)</td>
+                            </tr>
+                            <tr>
+                                <td><code>Spacing</code></td>
+                                <td>number</td>
+                                <td>✗</td>
+                                <td>行間距（預設1.0，範圍0.5-3.0）</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <pre><code class="language-lua">-- 基本用法
+NormalSection:AddParagraph({
+    Title = "Paragraph",
+    Content = "Very cool paragraph"
+})
+
+-- 使用表格傳入多行內容
+NormalSection:AddParagraph({
+    Title = "多行段落",
+    Content = {
+        "第一行內容",
+        "第二行內容",
+        "第三行內容"
+    }
+})
+
+-- 自訂文字大小
+NormalSection:AddParagraph({
+    Title = "大標題",
+    Content = {
+        "內容行 1",
+        "內容行 2"
+    },
+    TitleSize = 16,
+    ContentSize = 14
+})
+
+-- 自訂間隔
+NormalSection:AddParagraph({
+    Title = "大行間距段落",
+    Content = {
+        "第一行",
+        "第二行",
+        "第三行"
+    },
+    Spacing = 1.5  -- 增加行間距至 1.5 倍
+})
+</code></pre>
+            </section>
+
+            <hr style="border: 0; border-top: 2px solid var(--border-color); margin: 40px 0;">
+
+            <section id="config-manager">
+                <h2>建立配置管理器 - 參數說明</h2>
+                <h3>ConfigManager 參數</h3>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>參數</th>
+                                <th>類型</th>
+                                <th>必填</th>
+                                <th>說明</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><code>Directory</code></td>
+                                <td>string</td>
+                                <td>✓</td>
+                                <td>工作區中的資料夾</td>
+                            </tr>
+                            <tr>
+                                <td><code>Config</code></td>
+                                <td>string</td>
+                                <td>✓</td>
+                                <td>腳本的設定資料夾</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <pre><code class="language-lua">-- 建立配置管理器
+local ConfigManager = Compkiller:ConfigManager({
+    Directory = "Compkiller-UI",
+    Config = "Example-Configs",
+});
+</code></pre>
+            </section>
+
+            <section id="config-functions">
+                <h3>配置管理器功能</h3>
+                
+                <h4>寫入設定</h4>
+                <p>將當前數值寫入設定檔</p>
+                <pre><code class="language-lua">ConfigManager:WriteConfig({
+    Name = "設定名稱",
+    Author = "建立者名稱"
+})
+</code></pre>
+
+                <h4>讀取資訊</h4>
+                <p>讀取設定檔資訊，例如：建立者名稱和建立日期</p>
+                <pre><code class="language-lua">ConfigManager:ReadInfo("<設定名稱>")
+</code></pre>
+
+                <h4>載入設定</h4>
+                <p>載入目錄中的設定檔</p>
+                <pre><code class="language-lua">ConfigManager:LoadConfig("<設定名稱>")
+</code></pre>
+
+                <h4>刪除設定</h4>
+                <p>刪除目錄中的設定檔</p>
+                <pre><code class="language-lua">ConfigManager:DeleteConfig("<設定名稱>")
+</code></pre>
+
+                <h4>取得所有設定</h4>
+                <p>取得目錄中的所有設定檔</p>
+                <pre><code class="language-lua">ConfigManager:GetConfigs()
+</code></pre>
+
+                <h4>目錄路徑</h4>
+                <p>設定檔目錄路徑</p>
+                <pre><code class="language-lua">ConfigManager.Directory
+</code></pre>
+            </section>
+
+            <section id="draw-config">
+                <h2>建立設定分頁 - 參數說明</h2>
+                <h3>DrawConfig 參數</h3>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>參數</th>
+                                <th>類型</th>
+                                <th>必填</th>
+                                <th>說明</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><code>Name</code></td>
+                                <td>string</td>
+                                <td>✓</td>
+                                <td>設定分頁名稱</td>
+                            </tr>
+                            <tr>
+                                <td><code>Icon</code></td>
+                                <td>string</td>
+                                <td>✓</td>
+                                <td>名稱左邊圖示 來源:<a href="https://lucide.dev/icons">lucide.dev/icons</a></td>
+                            </tr>
+                            <tr>
+                                <td><code>Config</code></td>
+                                <td>object</td>
+                                <td>✓</td>
+                                <td>設定管理器物件（使用 <code>ConfigManager</code> 建立的管理器物件）</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <pre><code class="language-lua">-- 建立設定分頁
+local ConfigUI = Window:DrawConfig({
+    Name = "設定",
+    Icon = "folder",
+    Config = ConfigManager, -- 設定管理器（必填）
+});
+
+-- 初始化設定介面
+ConfigUI:Init();
+</code></pre>
+
+                <figure>
+                    <img src="https://2162411976-files.gitbook.io/~/files/v0/b/gitbook-x-prod.appspot.com/o/spaces%2Fu67EfmlwtAtmGvLQtoft%2Fuploads%2FVtNqgtwn3s9HPdsPq6NT%2Fimage.png?alt=media&token=0b0e53b5-928b-4385-920f-d8e1a549ea8f" alt="Config UI Preview">
+                    <figcaption>設定分頁預覽</figcaption>
+                </figure>
+            </section>
+
+        </div>
+    </main>
+
+    <script>
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('open');
+        }
+
+        // Auto-highlight active link in sidebar
+        const sections = document.querySelectorAll('section');
+        const navLi = document.querySelectorAll('.sidebar-nav ul li a');
+
+        window.addEventListener('scroll', () => {
+            let current = '';
+            sections.forEach(section => {
+                const sectionTop = section.offsetTop;
+                if (scrollY >= sectionTop - 60) {
+                    current = section.getAttribute('id');
+                }
+            });
+
+            navLi.forEach(a => {
+                a.classList.remove('active');
+                if (a.getAttribute('href') == '#' + current) {
+                    a.classList.add('active');
+                }
+            });
+        });
+    </script>
+</body>
+</html>

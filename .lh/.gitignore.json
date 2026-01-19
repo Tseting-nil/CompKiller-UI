@@ -1,0 +1,22 @@
+{
+    "sourceFile": ".gitignore",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 1,
+            "patches": [
+                {
+                    "date": 1768834246749,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                },
+                {
+                    "date": 1768834253586,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n@@ -1,3 +1,3 @@\n .lh/src/原始碼.lua.json\r\n .gitignore\r\n-計畫/響應式UI尺寸系統.md\r\n+計畫/*\r\n"
+                }
+            ],
+            "date": 1768834246749,
+            "name": "Commit-0",
+            "content": ".lh/src/原始碼.lua.json\r\n.gitignore\r\n計畫/響應式UI尺寸系統.md\r\n"
+        }
+    ]
+}
