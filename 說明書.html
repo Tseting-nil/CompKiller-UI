@@ -63,6 +63,13 @@
             font-size: 1.2rem;
             font-weight: 700;
             color: var(--accent-color);
+            margin-bottom: 8px;
+        }
+
+        .sidebar-header .version-info {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            line-height: 1.4;
         }
 
         .sidebar-nav {
@@ -248,6 +255,10 @@
     <aside class="sidebar" id="sidebar">
         <div class="sidebar-header">
             <h1>Compkiller UI</h1>
+            <div class="version-info">
+                <div>版本: 2026/01/19</div>
+                <div>最後更新: 2026/01/19</div>
+            </div>
         </div>
         <nav class="sidebar-nav">
             <ul>
@@ -286,7 +297,7 @@
 
             <section id="load-lib">
                 <h2>載入函式庫</h2>
-                <pre><code class="language-lua">local Compkiller = loadstring(game:HttpGet("https://gist.githubusercontent.com/Tseting-nil/6b56615c647585215f380b2d77b08a26/raw/a37982c23d56b4d79511c3f0fd3ac7d7804913ef/GUI:Compkiller"))();
+                <pre><code class="language-lua">local Compkiller = loadstring(game:HttpGet("https://github.com/Tseting-nil/CompKiller-UI/blob/main/src/UI_source.lua"))();
 </code></pre>
             </section>
 
@@ -1368,14 +1379,17 @@ ConfigUI:Init();
         }
 
         // Auto-highlight active link in sidebar
+        const mainContent = document.querySelector('.main-content');
         const sections = document.querySelectorAll('section');
         const navLi = document.querySelectorAll('.sidebar-nav ul li a');
 
-        window.addEventListener('scroll', () => {
+        function updateActiveSection() {
             let current = '';
+            const scrollTop = mainContent.scrollTop;
+            
             sections.forEach(section => {
-                const sectionTop = section.offsetTop;
-                if (scrollY >= sectionTop - 60) {
+                const sectionTop = section.offsetTop - mainContent.offsetTop;
+                if (scrollTop >= sectionTop - 100) {
                     current = section.getAttribute('id');
                 }
             });
@@ -1386,7 +1400,13 @@ ConfigUI:Init();
                     a.classList.add('active');
                 }
             });
-        });
+        }
+
+        // 監聽 main-content 的滾動事件
+        mainContent.addEventListener('scroll', updateActiveSection);
+        
+        // 初始化時也執行一次
+        updateActiveSection();
     </script>
 </body>
 </html>
