@@ -690,7 +690,25 @@ local SingleExtractTab = ContainerTab:DrawTab({
                                 <td><code>ToggleColor</code></td>
                                 <td>Color3</td>
                                 <td>✗</td>
+                                <td>自訂開關開啟時的顏色 (舊版相容)</td>
+                            </tr>
+                            <tr>
+                                <td><code>ToggleColor_open</code></td>
+                                <td>Color3</td>
+                                <td>✗</td>
                                 <td>自訂開關開啟時的顏色</td>
+                            </tr>
+                            <tr>
+                                <td><code>ToggleColor_close</code></td>
+                                <td>Color3</td>
+                                <td>✗</td>
+                                <td>自訂開關關閉時的顏色</td>
+                            </tr>
+                            <tr>
+                                <td><code>TextSize</code></td>
+                                <td>number</td>
+                                <td>✗</td>
+                                <td>自訂文字大小</td>
                             </tr>
                             <tr>
                                 <td><code>Flag</code></td>
@@ -712,7 +730,9 @@ local SingleExtractTab = ContainerTab:DrawTab({
     Name = "自動攻擊",
     Default = false, -- 預設關閉
     Flag = "AutoAttack", -- 用於設定檔儲存
-    ToggleColor = Color3.fromRGB(52, 199, 89), -- 開啟時顏色（綠色）
+    ToggleColor_open = Color3.fromRGB(52, 199, 89), -- 開啟時顏色（綠色）
+    ToggleColor_close = Color3.fromRGB(255, 0, 0), -- 關閉時顏色（紅色）
+    TextSize = 16, -- 字體大小
     Risky = true, -- 高風險功能（顯示紅色文字）
     Callback = function(Value)
         if Value then

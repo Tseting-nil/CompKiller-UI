@@ -125,12 +125,20 @@ export type Toggle = {
 	Default: boolean,
 	Flag: string | nil,
 	Risky: boolean,
+	ToggleColor: Color3 | nil,
+	ToggleColor_open: Color3 | nil,
+	ToggleColor_close: Color3 | nil,
+	TextSize: number | nil,
 	Callback: (Value: boolean) -> any?
 };
 
 export type MiniToggle = {
 	Default: boolean,
 	Flag: string | nil,
+	ToggleColor: Color3 | nil,
+	ToggleColor_open: Color3 | nil,
+	ToggleColor_close: Color3 | nil,
+	TextSize: number | nil,
 	Callback: (Value: boolean) -> any?
 };
 
@@ -1913,7 +1921,7 @@ function Compkiller:_RefreshUISize()
 	return useSmallUI
 end;
 
-function Compkiller:_AddLinkValue(Name , Default , GlobalBlock , LinkValues , rep , Signal , ToggleColor)
+function Compkiller:_AddLinkValue(Name , Default , GlobalBlock , LinkValues , rep , Signal , ToggleColor, ToggleColor_close)
 	if Name == "Toggle" then
 		local Toggle = Instance.new("Frame")
 		local UICorner = Instance.new("UICorner")
@@ -1983,7 +1991,7 @@ function Compkiller:_AddLinkValue(Name , Default , GlobalBlock , LinkValues , re
 				})
 
 				Compkiller:_Animation(Toggle,rep.Tween,{
-					BackgroundColor3 = Compkiller.Colors.DropColor
+					BackgroundColor3 = ToggleColor_close or Compkiller.Colors.DropColor
 				})
 			end;
 		end;
@@ -2491,6 +2499,10 @@ function Compkiller:_CreateBlock(Signal)
 		return BlockText.Text;
 	end;
 
+	function rep:SetTextSize(size)
+		BlockText.TextSize = size;
+	end;
+
 	function rep:SetTextColor(Color)
 		local oldIndex = table.find(Compkiller.Elements.SwitchColor , BlockText);
 
@@ -2554,8 +2566,8 @@ function Compkiller:_CreateBlock(Signal)
 		end;
 	end;
 
-	function rep:AddLink(Name , Default , ToggleColor)
-		return Compkiller:_AddLinkValue(Name , Default , GlobalBlock , LinkValues , rep , Signal , ToggleColor);
+	function rep:AddLink(Name , Default , ToggleColor, ToggleColor_close)
+		return Compkiller:_AddLinkValue(Name , Default , GlobalBlock , LinkValues , rep , Signal , ToggleColor, ToggleColor_close);
 	end;
 
 	return rep;
@@ -4209,11 +4221,21 @@ function Compkiller:_LoadOption(Value , TabSignal)
 		Config = Compkiller.__CONFIG(Config,{
 			Flag = nil,
 			Default = false,
-			ToggleColor = nil, -- 自訂開關顏色
+			TextSize = nil,
+			ToggleColor = nil, -- 自訂開關顏色 (舊版相容)
+			ToggleColor_open = nil,
+			ToggleColor_close = nil,
 			Callback = function() end;
 		});
 
-		local Toggle = Value:AddLink("Toggle" , Config.Default , Config.ToggleColor);
+		if Config.TextSize then
+			Value.BlockText.TextSize = Config.TextSize;
+		end;
+
+		local OpenColor = Config.ToggleColor_open or Config.ToggleColor;
+		local CloseColor = Config.ToggleColor_close;
+
+		local Toggle = Value:AddLink("Toggle" , Config.Default , OpenColor, CloseColor);
 
 		-- 根據 default_Toggle 設定決定是否在初始化時調用 Callback
 		if Compkiller.default_Toggle == "on" then
@@ -4754,7 +4776,10 @@ function Compkiller:_LoadElement(Parent: Frame , EnabledLine: boolean , Signal ,
 			Default = false,
 			Flag = nil,
 			Risky = false,
-			ToggleColor = nil, -- 自訂開關顏色
+			TextSize = nil,
+			ToggleColor = nil, -- 自訂開關顏色 (舊版相容)
+			ToggleColor_open = nil,
+			ToggleColor_close = nil,
 			Callback = function() end;
 		});
 
@@ -4764,6 +4789,10 @@ function Compkiller:_LoadElement(Parent: Frame , EnabledLine: boolean , Signal ,
 
 		Block:SetText(Config.Name);
 
+		if Config.TextSize then
+			Block:SetTextSize(Config.TextSize);
+		end;
+
 		if Config.Risky then
 			Block:SetTextColor(Compkiller.Colors.Risky);
 		end;
@@ -4772,7 +4801,10 @@ function Compkiller:_LoadElement(Parent: Frame , EnabledLine: boolean , Signal ,
 
 		Block:SetVisible(Signal:GetValue());
 
-		local Toggle = Block:AddLink('Toggle' , Config.Default , Config.ToggleColor);
+		local OpenColor = Config.ToggleColor_open or Config.ToggleColor;
+		local CloseColor = Config.ToggleColor_close;
+
+		local Toggle = Block:AddLink('Toggle' , Config.Default , OpenColor, CloseColor);
 
 		-- 根據 default_Toggle 設定決定是否在初始化時調用 Callback
 		if Compkiller.default_Toggle == "on" then
