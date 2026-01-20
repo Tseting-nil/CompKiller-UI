@@ -256,8 +256,8 @@
         <div class="sidebar-header">
             <h1>Compkiller UI</h1>
             <div class="version-info">
-                <div>版本: 2026/01/19</div>
-                <div>最後更新: 2026/01/19</div>
+                <div>版本: 2026/01/20</div>
+                <div>最後更新: 2026/01/20</div>
             </div>
         </div>
         <nav class="sidebar-nav">
@@ -339,6 +339,11 @@
                                 <td>number</td>
                                 <td>自訂UI文字大小（全域）</td>
                             </tr>
+                            <tr>
+                                <td><code>default_Toggle</code></td>
+                                <td>string</td>
+                                <td>開關預設值加載行為：<code>"on"</code> 加載時執行 Callback，<code>"off"</code> 不執行（預設）</td>
+                            </tr>
                         </tbody>
                     </table>
                 </div>
@@ -350,6 +355,7 @@
     -- 根據設備自動選擇 UI 尺寸：手機用小介面，電腦/平板用大介面
     Scale = Compkiller:_UseSmallUI() and Compkiller.Scale.Mobile or Compkiller.Scale.Window,
     TextSize = 15,
+    default_Toggle = "off", -- "on" = 加載時執行 Callback, "off" = 不執行（預設）
 });
 </code></pre>
             </section>

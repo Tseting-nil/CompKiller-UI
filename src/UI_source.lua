@@ -1,4 +1,12 @@
---工具透過dex命名找functuon
+--[[
+	該UI庫基於 4lpaca-pin/CompKiller 之修改版
+	原始 Github:https://github.com/4lpaca-pin/CompKiller
+	修改版 Github: https://github.com/Tseting-nil/CompKiller-UI
+	具體參考:https://tseting-nil.github.io/CompKiller-UI/%E8%AA%AA%E6%98%8E%E6%9B%B8.html#load-lib
+	版本:2026/01/20
+--]]
+
+--找functuon
 local find = 0
 local findstop = false
 
@@ -4207,6 +4215,13 @@ function Compkiller:_LoadOption(Value , TabSignal)
 
 		local Toggle = Value:AddLink("Toggle" , Config.Default , Config.ToggleColor);
 
+		-- 根據 default_Toggle 設定決定是否在初始化時調用 Callback
+		if Compkiller.default_Toggle == "on" then
+			task.defer(function()
+				Config.Callback(Config.Default);
+			end);
+		end;
+
 		Toggle.Input.MouseButton1Click:Connect(function()
 			Config.Default = not Config.Default;
 
@@ -4758,6 +4773,13 @@ function Compkiller:_LoadElement(Parent: Frame , EnabledLine: boolean , Signal ,
 		Block:SetVisible(Signal:GetValue());
 
 		local Toggle = Block:AddLink('Toggle' , Config.Default , Config.ToggleColor);
+
+		-- 根據 default_Toggle 設定決定是否在初始化時調用 Callback
+		if Compkiller.default_Toggle == "on" then
+			task.defer(function()
+				Config.Callback(Config.Default);
+			end);
+		end;
 
 		Toggle.Input.MouseButton1Click:Connect(function()
 			Config.Default = not Config.Default;
@@ -6674,6 +6696,7 @@ function Compkiller.new(Config : Window)
 		Logo = "rbxassetid://120245531583106",
 		Scale = Compkiller:_UseSmallUI() and Compkiller.Scale.Mobile or Compkiller.Scale.Window,
 		TextSize = 15,
+		default_Toggle = "off", -- "on" = 加載時執行 Callback, "off" = 不執行（預設）
 	});
 
 	-- 處理 Logo 參數：支援 {"圖片路徑", true/false} 格式
@@ -6682,6 +6705,9 @@ function Compkiller.new(Config : Window)
 		ShowLogo = Config.Logo[2] == true
 		Config.Logo = Config.Logo[1] or "rbxassetid://120245531583106"
 	end
+
+	-- 存儲 default_Toggle 設定，讓 AddToggle 可以讀取
+	Compkiller.default_Toggle = Config.default_Toggle;
 
 	local TabHover = Compkiller.__SIGNAL(false);
 	local WindowOpen = Compkiller.__SIGNAL(true);
