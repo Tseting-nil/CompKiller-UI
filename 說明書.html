@@ -150,6 +150,47 @@
             overflow-x: auto;
             margin-bottom: 20px;
             border: 1px solid var(--border-color);
+            position: relative; /* For copy button positioning */
+        }
+
+        .copy-btn {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            background-color: var(--bg-tertiary);
+            color: var(--text-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            padding: 4px;
+            width: 28px;
+            height: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            opacity: 0; /* Hidden by default */
+        }
+
+        .copy-btn svg {
+            width: 16px;
+            height: 16px;
+            fill: currentColor;
+        }
+
+        pre:hover .copy-btn {
+            opacity: 1; /* Show on hover */
+        }
+
+        .copy-btn:hover {
+            background-color: var(--accent-color);
+            color: white;
+            border-color: var(--accent-color);
+        }
+
+        .copy-btn.copied {
+            width: auto;
+            padding: 4px 8px;
         }
 
         code {
@@ -247,6 +288,45 @@
             }
         }
     </style>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+             // SVG Icon for Copy
+             const copyIcon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>`;
+
+             document.querySelectorAll('pre').forEach(pre => {
+                // Check if pre contains code
+                if (pre.querySelector('code')) {
+                    const button = document.createElement('button');
+                    button.className = 'copy-btn';
+                    button.innerHTML = copyIcon;
+                    button.title = "Copy to clipboard";
+                    
+                    button.addEventListener('click', () => {
+                        const code = pre.querySelector('code').innerText;
+                        navigator.clipboard.writeText(code).then(() => {
+                            const originalContent = button.innerHTML;
+                            button.innerText = 'Copy!';
+                            button.classList.add('copied');
+                            button.style.backgroundColor = 'var(--accent-color)';
+                            button.style.color = 'white';
+                            
+                            setTimeout(() => {
+                                button.innerHTML = originalContent;
+                                button.classList.remove('copied');
+                                button.style.backgroundColor = '';
+                                button.style.color = '';
+                            }, 2000);
+                        }).catch(err => {
+                            console.error('Failed to copy: ', err);
+                            button.innerText = 'Error';
+                        });
+                    });
+                    
+                    pre.appendChild(button);
+                }
+             });
+        });
+    </script>
 </head>
 <body>
 
@@ -266,6 +346,7 @@
                 <li><a href="#load-lib">載入函式庫</a></li>
                 <li><h3>視窗與標籤</h3></li>
                 <li><a href="#create-window">建立視窗</a></li>
+                <li><a href="#window-methods">視窗控制方法</a></li>
                 <li><a href="#create-category">建立左側標籤類別</a></li>
                 <li><a href="#create-tab">建立左側標籤</a></li>
                 <li><a href="#create-section">建立右側選項卡</a></li>
@@ -357,6 +438,70 @@
     TextSize = 15,
     default_Toggle = "off", -- "on" = 加載時執行 Callback, "off" = 不執行（預設）
 });
+</code></pre>
+            </section>
+
+            <section id="window-methods">
+                <h2>視窗控制方法</h2>
+                
+                <h3>Window:SetVisible(bool)</h3>
+                <p>控制UI的顯示/隱藏狀態。</p>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>參數</th>
+                                <th>類型</th>
+                                <th>說明</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><code>bool</code></td>
+                                <td>boolean</td>
+                                <td><code>true</code> 顯示UI，<code>false</code> 隱藏UI</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <pre><code class="language-lua">-- 隱藏UI
+Window:SetVisible(false)
+
+-- 顯示UI
+Window:SetVisible(true)
+</code></pre>
+
+                <h3>Window:Toggle(bool)</h3>
+                <p>切換UI的開關狀態。</p>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>參數</th>
+                                <th>類型</th>
+                                <th>說明</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><code>bool</code></td>
+                                <td>boolean</td>
+                                <td><code>true</code> 開啟UI，<code>false</code> 關閉UI</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <pre><code class="language-lua">-- 開啟UI
+Window:Toggle(true)
+
+-- 關閉UI
+Window:Toggle(false)
+</code></pre>
+
+                <h3>Window:Destroy()</h3>
+                <p>完全銷毀並移除UI，釋放所有資源。此操作不可逆。</p>
+                <pre><code class="language-lua">-- 銷毀UI（會清理所有線程、連接和GUI元素）
+Window:Destroy()
 </code></pre>
             </section>
 

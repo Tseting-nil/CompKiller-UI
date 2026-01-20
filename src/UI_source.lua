@@ -10261,6 +10261,50 @@ function Compkiller.new(Config : Window)
 		Config.Keybind = new;
 	end;
 
+	function WindowArgs:Destroy()
+		-- 取消所有線程
+		if WindowArgs.THREADS then
+			for i, thread in pairs(WindowArgs.THREADS) do
+				if type(thread) == "thread" then
+					task.cancel(thread);
+				end
+			end
+			table.clear(WindowArgs.THREADS);
+		end
+
+		-- 取消主循環線程
+		if WindowArgs.LOOP_THREAD then
+			task.cancel(WindowArgs.LOOP_THREAD);
+			WindowArgs.LOOP_THREAD = nil;
+		end
+
+		-- 斷開所有標籤頁連接
+		if WindowArgs.Tabs then
+			for i, tab in pairs(WindowArgs.Tabs) do
+				if tab.Remote then
+					tab.Remote:Fire(false);
+				end
+			end
+			table.clear(WindowArgs.Tabs);
+		end
+
+		-- 從全局窗口列表中移除
+		local windowIndex = table.find(Compkiller.Windows, CompKiller);
+		if windowIndex then
+			table.remove(Compkiller.Windows, windowIndex);
+		end
+
+		-- 銷毀主GUI
+		if CompKiller then
+			CompKiller:Destroy();
+		end
+
+		-- 清理引用
+		WindowArgs.Root = nil;
+		WindowArgs.SelectedTab = nil;
+		WindowArgs.LastTab = nil;
+	end;
+
 	function WindowArgs:Update(config: WindowUpdate)
 		config = config or {};
 		config.Logo = config.Logo or Config.Logo;
