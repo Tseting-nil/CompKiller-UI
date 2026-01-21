@@ -336,8 +336,8 @@
         <div class="sidebar-header">
             <h1>Compkiller UI</h1>
             <div class="version-info">
-                <div>版本: 2026/01/20</div>
-                <div>最後更新: 2026/01/20</div>
+                <div>版本: 2026/01/21</div>
+                <div>最後更新: 2026/01/21</div>
             </div>
         </div>
         <nav class="sidebar-nav">
@@ -1246,7 +1246,7 @@ NormalSection:AddButtonRow({
                                 <td>顯示的文字內容</td>
                             </tr>
                             <tr>
-                                <td><code>Color</code></td>
+                                <td><code>TextColor3</code></td>
                                 <td>Color3</td>
                                 <td>✗</td>
                                 <td>文字顏色（預設使用主題顏色）</td>
@@ -1275,14 +1275,14 @@ NormalSection:AddLabel({
 -- 自訂顏色和大小
 local myLabel = NormalSection:AddLabel({
     Text = "這是紅色的標籤",
-    Color = Color3.fromRGB(255, 100, 100),
+    TextColor3 = Color3.fromRGB(255, 100, 100),
     TextSize = 16
 })
 
 -- 使用富文本
 NormalSection:AddLabel({
     Text = "&lt;b&gt;粗體&lt;/b&gt; 和 &lt;i&gt;斜體&lt;/i&gt;",
-    Color = Color3.fromRGB(100, 200, 255),
+    TextColor3 = Color3.fromRGB(100, 200, 255),
     RichText = true
 })
 

@@ -227,7 +227,7 @@ export type Paragraph = {
 
 export type Label = {
 	Text: string,
-	Color: Color3 | nil,
+	TextColor3: Color3 | nil,
 	TextSize: number | nil,
 	RichText: boolean | nil
 }
@@ -4228,8 +4228,12 @@ function Compkiller:_LoadOption(Value , TabSignal)
 			Callback = function() end;
 		});
 
+		-- 應用自訂字體大小，並根據字體大小調整區塊高度
 		if Config.TextSize then
 			Value.BlockText.TextSize = Config.TextSize;
+			-- 預設高度為 30，預設字體大小為 14，根據字體大小差異調整高度
+			local heightAdjustment = math.max(0, Config.TextSize - 14);
+			Value.Root.Size = UDim2.new(1, -1, 0, 30 + heightAdjustment);
 		end;
 
 		local OpenColor = Config.ToggleColor_open or Config.ToggleColor;
@@ -4789,8 +4793,12 @@ function Compkiller:_LoadElement(Parent: Frame , EnabledLine: boolean , Signal ,
 
 		Block:SetText(Config.Name);
 
+		-- 應用自訂字體大小，並根據字體大小調整區塊高度
 		if Config.TextSize then
 			Block:SetTextSize(Config.TextSize);
+			-- 預設高度為 30，預設字體大小為 14，根據字體大小差異調整高度
+			local heightAdjustment = math.max(0, Config.TextSize - 14);
+			Block.Root.Size = UDim2.new(1, -1, 0, 30 + heightAdjustment);
 		end;
 
 		if Config.Risky then
@@ -5701,7 +5709,7 @@ function Compkiller:_LoadElement(Parent: Frame , EnabledLine: boolean , Signal ,
 	function Args:AddLabel(Config: Label)
 		Config = Compkiller.__CONFIG(Config, {
 			Text = "Label",
-			Color = nil,
+			TextColor3 = nil,
 			TextSize = 14,
 			RichText = true
 		});
@@ -5734,7 +5742,7 @@ function Compkiller:_LoadElement(Parent: Frame , EnabledLine: boolean , Signal ,
 		LabelText.ZIndex = Zindex + 3
 		LabelText.Font = Enum.Font.GothamMedium
 		LabelText.Text = Config.Text
-		LabelText.TextColor3 = Config.Color or Compkiller.Colors.SwitchColor
+		LabelText.TextColor3 = Config.TextColor3 or Compkiller.Colors.SwitchColor
 		LabelText.TextSize = Config.TextSize
 		LabelText.TextTransparency = 0.300
 		LabelText.TextXAlignment = Enum.TextXAlignment.Left
@@ -5742,7 +5750,7 @@ function Compkiller:_LoadElement(Parent: Frame , EnabledLine: boolean , Signal ,
 		LabelText.RichText = Config.RichText
 		LabelText.TextWrapped = true
 
-		if not Config.Color then
+		if not Config.TextColor3 then
 			table.insert(Compkiller.Elements.SwitchColor , {
 				Element = LabelText,
 				Property = 'TextColor3'
