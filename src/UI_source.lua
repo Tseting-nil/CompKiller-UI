@@ -6386,7 +6386,7 @@ function Compkiller:_LoadElement(Parent: Frame , EnabledLine: boolean , Signal ,
 		ValueText.Font = Enum.Font.Gotham
 		ValueText.Text = DaTabarser(Config.Default)
 		ValueText.TextColor3 = Compkiller.Colors.SwitchColor
-		ValueText.TextSize = 11.000
+		ValueText.TextSize = 14.000
 		ValueText.TextXAlignment = Enum.TextXAlignment.Left
 
 		table.insert(Compkiller.Elements.SwitchColor , {
