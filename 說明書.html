@@ -1039,6 +1039,102 @@ NormalSection:AddDropdown({
     Callback = print
 })
 </code></pre>
+
+                <h3>動態修改下拉選單</h3>
+                <p>下拉選單支援以下方法來動態修改其內容和狀態：</p>
+
+                <h4>可用方法</h4>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>方法</th>
+                                <th>參數</th>
+                                <th>說明</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><code>SetText(str)</code></td>
+                                <td>string</td>
+                                <td>修改下拉選單的標題文字</td>
+                            </tr>
+                            <tr>
+                                <td><code>GetText()</code></td>
+                                <td>-</td>
+                                <td>獲取當前標題文字</td>
+                            </tr>
+                            <tr>
+                                <td><code>SetValues(values)</code></td>
+                                <td>table</td>
+                                <td>修改下拉選單的選項列表</td>
+                            </tr>
+                            <tr>
+                                <td><code>SetValue(value)</code></td>
+                                <td>value</td>
+                                <td>強制設定選中的項目（會觸發 Callback）</td>
+                            </tr>
+                            <tr>
+                                <td><code>GetValue()</code></td>
+                                <td>-</td>
+                                <td>獲取當前選中的值</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <h4>使用範例</h4>
+                <pre><code class="language-lua">-- 建立下拉選單並保存引用
+local dropdown = NormalSection:AddDropdown({
+    Name = "選擇武器",
+    Default = "劍",
+    Values = {"劍", "槍", "弓"},
+    Flag = "Weapon_Dropdown",
+    Callback = function(value)
+        print("選擇了:", value)
+    end
+})
+
+-- 修改標題
+dropdown:SetText("主要武器選擇")
+
+-- 動態更新選項列表
+task.wait(2)
+dropdown:SetValues({"劍", "槍", "弓", "魔杖", "匕首"})
+
+-- 程式強制選擇（會觸發 Callback）
+dropdown:SetValue("魔杖")
+
+-- 獲取當前選中的值
+local currentWeapon = dropdown:GetValue()
+print("當前武器:", currentWeapon)
+
+-- 獲取當前標題
+local title = dropdown:GetText()
+print("標題:", title)
+</code></pre>
+
+                <h4>多選模式範例</h4>
+                <pre><code class="language-lua">local multiDropdown = NormalSection:AddDropdown({
+    Name = "選擇技能",
+    Default = {"火球術"},
+    Multi = true,
+    Values = {"火球術", "冰凍術", "治療術", "閃電術"},
+    Callback = function(selected)
+        for skill, enabled in pairs(selected) do
+            if enabled then
+                print("已啟用:", skill)
+            end
+        end
+    end
+})
+
+-- 修改選項（新增更多技能）
+multiDropdown:SetValues({"火球術", "冰凍術", "治療術", "閃電術", "風暴術", "傳送術"})
+
+-- 設定多個選中項目（會觸發 Callback）
+multiDropdown:SetValue({["火球術"] = true, ["治療術"] = true})
+</code></pre>
             </section>
 
             <section id="add-button">
