@@ -4709,6 +4709,9 @@ function Compkiller:_LoadDropdown(BaseParent: TextButton , Callback: () -> any)
 					});
 
 					Callback(DataFrame.Value)
+
+					-- 選擇完成後自動關閉下拉選單（單選模式）
+					ToggleUI(false);
 				end);
 			end;
 		end;
