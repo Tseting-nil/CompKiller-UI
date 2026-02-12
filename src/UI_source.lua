@@ -5931,23 +5931,38 @@ function Compkiller:_LoadElement(Parent: Frame , EnabledLine: boolean , Signal ,
 
 		local UpdateScale = function()
 
+			-- 獲取實際可用寬度 (容器寬度減去左右邊距)
+			local availableWidth = Paragraph.AbsoluteSize.X - 20
+			
+			if availableWidth <= 0 then
+				-- 如果還沒有渲染,使用預設寬度
+				availableWidth = 445 -- 預設寬度 (485 - 40)
+			end
+
 			if not DescriptionText.Text:byte() then
-				local TitleScale = TextService:GetTextSize(BlockText.Text,BlockText.TextSize,BlockText.Font,Vector2.new(math.huge,math.huge));
+				local TitleScale = TextService:GetTextSize(BlockText.Text,BlockText.TextSize,BlockText.Font,Vector2.new(availableWidth,math.huge));
 
 				Compkiller:_Animation(Paragraph,TweenInfo.new(0.15),{
 					Size = UDim2.new(1, -1, 0, TitleScale.Y + Base)
 				});
 			else
-				local TitleScale = TextService:GetTextSize(BlockText.Text,BlockText.TextSize,BlockText.Font,Vector2.new(math.huge,math.huge));
-				local ContentScale = TextService:GetTextSize(DescriptionText.Text,DescriptionText.TextSize,DescriptionText.Font,Vector2.new(math.huge,math.huge));
+				local TitleScale = TextService:GetTextSize(BlockText.Text,BlockText.TextSize,BlockText.Font,Vector2.new(availableWidth,math.huge));
+				-- 使用實際容器寬度計算內容高度,並考慮行高設定
+				local ContentScale = TextService:GetTextSize(DescriptionText.Text,DescriptionText.TextSize,DescriptionText.Font,Vector2.new(availableWidth,math.huge));
+				local adjustedContentHeight = ContentScale.Y * Config.Spacing
 
 				Compkiller:_Animation(Paragraph,TweenInfo.new(0.15),{
-					Size = UDim2.new(1, -1, 0, (TitleScale.Y + ContentScale.Y) + Base)
+					Size = UDim2.new(1, -1, 0, (TitleScale.Y + adjustedContentHeight) + Base)
 				});
 			end;
 		end;
 
 		UpdateScale();
+
+		-- 當容器大小改變時重新計算高度
+		Paragraph:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+			UpdateScale();
+		end);
 
 		local Args = {};
 
