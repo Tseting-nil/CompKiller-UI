@@ -4272,6 +4272,16 @@ function Compkiller:_LoadOption(Value , TabSignal)
 			return Config.Default;
 		end;
 
+		-- 新增 SetVisible 方法來控制 Mini Toggle 的顯示/隱藏
+		function Args:SetVisible(bool)
+			Value.Root.Visible = bool;
+		end;
+
+		-- 新增 GetVisible 方法來獲取 Mini Toggle 當前的顯示狀態
+		function Args:GetVisible()
+			return Value.Root.Visible;
+		end;
+
 		if Config.Flag then
 			Compkiller.Flags[Config.Flag] = Args;
 		end;
@@ -4867,9 +4877,15 @@ function Compkiller:_LoadElement(Parent: Frame , EnabledLine: boolean , Signal ,
 			return Block:GetText();
 		end;
 
-		if Config.Flag then
-			Compkiller.Flags[Config.Flag] = Args;
-		end;
+	-- 新增 SetVisible 方法來控制 Toggle 的顯示/隱藏
+	function Args:SetVisible(bool)
+		Block.Root.Visible = bool;
+	end;
+
+	-- 新增 GetVisible 方法來獲取 Toggle 當前的顯示狀態
+	function Args:GetVisible()
+		return Block.Root.Visible;
+	end;
 
 		if not DisableStackKeybind then
 			local AutoKeybind = Compkiller:_KeybindHandler(Block.Root , "Toggle" , Args , Signal , Zindex , Config);
@@ -4971,6 +4987,16 @@ function Compkiller:_LoadElement(Parent: Frame , EnabledLine: boolean , Signal ,
 			return (typeof(Config.Default) == "string" and Config.Default) or Config.Default.Name;
 		end;
 
+		-- 新增 SetVisible 方法來控制 Keybind 的顯示/隱藏
+		function Args:SetVisible(bool)
+			Block.Root.Visible = bool;
+		end;
+
+		-- 新增 GetVisible 方法來獲取 Keybind 當前的顯示狀態
+		function Args:GetVisible()
+			return Block.Root.Visible;
+		end;
+
 		if Config.Flag then
 			Compkiller.Flags[Config.Flag] = Args;
 		end;
@@ -5049,6 +5075,16 @@ function Compkiller:_LoadElement(Parent: Frame , EnabledLine: boolean , Signal ,
 					Transparency = Config.Transparency
 				}
 			};
+		end;
+
+		-- 新增 SetVisible 方法來控制 ColorPicker 的顯示/隱藏
+		function Args:SetVisible(bool)
+			Block.Root.Visible = bool;
+		end;
+
+		-- 新增 GetVisible 方法來獲取 ColorPicker 當前的顯示狀態
+		function Args:GetVisible()
+			return Block.Root.Visible;
 		end;
 
 		if Config.Flag then
@@ -5206,6 +5242,16 @@ function Compkiller:_LoadElement(Parent: Frame , EnabledLine: boolean , Signal ,
 				});
 			end;
 		end);
+
+		-- 新增 SetVisible 方法來控制 ButtonRow 的顯示/隱藏
+		function ReturnArgs:SetVisible(bool)
+			ButtonRowFrame.Visible = bool;
+		end;
+
+		-- 新增 GetVisible 方法來獲取 ButtonRow 當前的顯示狀態
+		function ReturnArgs:GetVisible()
+			return ButtonRowFrame.Visible;
+		end;
 
 		return ReturnArgs;
 	end;
@@ -5373,6 +5419,16 @@ function Compkiller:_LoadElement(Parent: Frame , EnabledLine: boolean , Signal ,
 
 		function Args:GetText()
 			return TextLabel.Text;
+		end;
+
+		-- 新增 SetVisible 方法來控制 Button 的顯示/隱藏
+		function Args:SetVisible(bool)
+			Button.Visible = bool;
+		end;
+
+		-- 新增 GetVisible 方法來獲取 Button 當前的顯示狀態
+		function Args:GetVisible()
+			return Button.Visible;
 		end;
 
 		return Args;
@@ -5696,6 +5752,16 @@ function Compkiller:_LoadElement(Parent: Frame , EnabledLine: boolean , Signal ,
 			return Config.Default;
 		end;
 
+		-- 新增 SetVisible 方法來控制 Slider 的顯示/隱藏
+		function Args:SetVisible(bool)
+			Slider.Visible = bool;
+		end;
+
+		-- 新增 GetVisible 方法來獲取 Slider 當前的顯示狀態
+		function Args:GetVisible()
+			return Slider.Visible;
+		end;
+
 		if Config.Flag then
 			Compkiller.Flags[Config.Flag] = Args;
 		end;
@@ -5827,6 +5893,16 @@ function Compkiller:_LoadElement(Parent: Frame , EnabledLine: boolean , Signal ,
 				});
 			end;
 		end);
+
+		-- 新增 SetVisible 方法來控制 Label 的顯示/隱藏
+		function ReturnArgs:SetVisible(bool)
+			LabelFrame.Visible = bool;
+		end;
+
+		-- 新增 GetVisible 方法來獲取 Label 當前的顯示狀態
+		function ReturnArgs:GetVisible()
+			return LabelFrame.Visible;
+		end;
 
 		return ReturnArgs;
 	end;
@@ -6003,6 +6079,16 @@ function Compkiller:_LoadElement(Parent: Frame , EnabledLine: boolean , Signal ,
 				});
 			end;
 		end);
+
+		-- 新增 SetVisible 方法來控制 Paragraph 的顯示/隱藏
+		function Args:SetVisible(bool)
+			Paragraph.Visible = bool;
+		end;
+
+		-- 新增 GetVisible 方法來獲取 Paragraph 當前的顯示狀態
+		function Args:GetVisible()
+			return Paragraph.Visible;
+		end;
 
 		return Args;
 	end;
@@ -6239,6 +6325,16 @@ function Compkiller:_LoadElement(Parent: Frame , EnabledLine: boolean , Signal ,
 
 		function Args:GetValue()
 			return Config.Default;
+		end;
+
+		-- 新增 SetVisible 方法來控制 TextBox 的顯示/隱藏
+		function Args:SetVisible(bool)
+			TextBox.Visible = bool;
+		end;
+
+		-- 新增 GetVisible 方法來獲取 TextBox 當前的顯示狀態
+		function Args:GetVisible()
+			return TextBox.Visible;
 		end;
 
 		if Config.Flag then
@@ -6554,6 +6650,16 @@ function Compkiller:_LoadElement(Parent: Frame , EnabledLine: boolean , Signal ,
 
 		function Args:GetValue()
 			return Config.Default;
+		end;
+
+		-- 新增 SetVisible 方法來控制 Dropdown 的顯示/隱藏
+		function Args:SetVisible(bool)
+			Dropdown.Visible = bool;
+		end;
+
+		-- 新增 GetVisible 方法來獲取 Dropdown 當前的顯示狀態
+		function Args:GetVisible()
+			return Dropdown.Visible;
 		end;
 
 		if Config.Flag then
