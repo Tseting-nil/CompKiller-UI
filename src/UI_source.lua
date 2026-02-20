@@ -9965,7 +9965,28 @@ function Compkiller.new(Config : Window)
 				refreshScale();
 			end)
 
-			return Compkiller:_LoadElement(Section , true , TabOpenSignal)
+			local SectionArgs = Compkiller:_LoadElement(Section , true , TabOpenSignal)
+			
+			-- 新增 SetVisible 方法來控制 Section 的顯示/隱藏
+			function SectionArgs:SetVisible(bool)
+				Section.Visible = bool;
+				
+				if bool then
+					refreshScale();
+				else
+					-- 當隱藏時，通知父容器重新計算佈局
+					if WindowArgs.THREADS[Section] then
+						Section:SetAttribute('Height',nil);
+					end;
+				end;
+			end;
+			
+			-- 新增 GetVisible 方法來獲取 Section 當前的顯示狀態
+			function SectionArgs:GetVisible()
+				return Section.Visible;
+			end;
+
+			return SectionArgs
 		end;
 
 		return TabArgs;
