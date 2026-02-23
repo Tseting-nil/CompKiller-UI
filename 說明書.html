@@ -590,6 +590,11 @@ local NormalTab = Window:DrawTab({
                                 <td>boolean</td>
                                 <td>是否顯示關閉按鈕（預設為 true 顯示，false 隱藏）</td>
                             </tr>
+                            <tr>
+                                <td><code>DefaultOpen</code></td>
+                                <td>boolean</td>
+                                <td>預設是否展開（預設為 true 展開，false 收合）</td>
+                            </tr>
                         </tbody>
                     </table>
                 </div>
@@ -600,6 +605,14 @@ local NormalTab = Window:DrawTab({
 local NormalSection = NormalTab:DrawSection({
     Name = "Section",
     Position = 'left'
+});
+
+-- 建立預設收合的選項卡
+local ClosedSection = NormalTab:DrawSection({
+    Name = "預設收合區塊",
+    Position = 'left',
+    Canclose = true,
+    DefaultOpen = false  -- 預設收合
 });
 </code></pre>
 

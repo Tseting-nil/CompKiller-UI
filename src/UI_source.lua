@@ -9784,13 +9784,14 @@ function Compkiller.new(Config : Window)
 			config = Compkiller.__CONFIG(config,{
 				Name = "Section",
 				Position = "left",
-				Canclose = true
+				Canclose = true,
+				DefaultOpen = true
 			});
 
 			local Parent = (TabConfig.Type == "Double" and ((string.lower(config.Position) == "left" and Upvalue.Left) or Upvalue.Right)) or Upvalue.Left;
 			local ParentLayout = (TabConfig.Type == "Double" and ((string.lower(config.Position) == "left" and Upvalue.LeftLayout) or Upvalue.RightLayout)) or Upvalue.LeftLayout;
 
-			local IsOpen = true;
+			local IsOpen = config.DefaultOpen;
 
 			local Section = Instance.new("Frame")
 			local UICorner = Instance.new("UICorner")
@@ -10065,6 +10066,11 @@ function Compkiller.new(Config : Window)
 					})
 				end)
 			end
+
+			-- 預設關閉時，設定初始收合狀態
+			if not config.DefaultOpen and config.Canclose then
+				SectionClose.Rotation = -180;
+			end;
 
 			task.delay(2.5,function()
 				refresh();
