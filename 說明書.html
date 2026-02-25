@@ -336,8 +336,8 @@
         <div class="sidebar-header">
             <h1>Compkiller UI</h1>
             <div class="version-info">
-                <div>版本: 2026/02/20</div>
-                <div>最後更新: 2026/02/20</div>
+                <div>版本: 2026/02/25</div>
+                <div>最後更新: 2026/02/25</div>
             </div>
         </div>
         <nav class="sidebar-nav">
@@ -361,6 +361,8 @@
                 <li><a href="#add-button-row">建立並排按鈕</a></li>
                 <li><a href="#add-label">建立標籤文字</a></li>
                 <li><a href="#add-paragraph">建立段落文字</a></li>
+                <li><a href="#add-inputtext">建立文字輸入框</a></li>
+                <li><a href="#add-inputnum">建立數字輸入框</a></li>
                 <li><a href="#common-methods">元件通用方法</a></li>
                 <li><h3>設定管理</h3></li>
                 <li><a href="#config-manager">建立配置管理器</a></li>
@@ -1594,6 +1596,175 @@ NormalSection:AddParagraph({
 </code></pre>
             </section>
 
+            <section id="add-inputtext">
+                <h2>建立文字輸入框 - 參數說明</h2>
+                <p style="margin-bottom: 20px; color: var(--text-secondary);">
+                    全寬文字輸入框元件，佈局為上方標題 + 下方全寬輸入框，含清除按鈕（X）。
+                </p>
+                <h4>AddInputText 參數</h4>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>參數</th>
+                                <th>類型</th>
+                                <th>必填</th>
+                                <th>說明</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr><td><code>Name</code></td><td>string</td><td>✓</td><td>輸入框標題</td></tr>
+                            <tr><td><code>Default</code></td><td>string</td><td>✗</td><td>預設值（預設為空字串）</td></tr>
+                            <tr><td><code>Placeholder</code></td><td>string</td><td>✗</td><td>佔位符文字</td></tr>
+                            <tr><td><code>Callback</code></td><td>function</td><td>✓</td><td>文字變更時執行的函數</td></tr>
+                            <tr><td><code>MaxLength</code></td><td>number</td><td>✗</td><td>最大字元長度（不填則無限制）</td></tr>
+                            <tr><td><code>Flag</code></td><td>string</td><td>✗</td><td>用於設定檔儲存的標記</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <pre><code class="language-lua">-- 基本文字輸入
+local nameInput = NormalSection:AddInputText({
+    Name = "玩家暱稱",
+    Default = "",
+    Placeholder = "請輸入暱稱...",
+    Flag = "PlayerName",
+    Callback = function(text)
+        print("輸入的暱稱:", text)
+    end
+})
+
+-- 帶最大長度限制
+NormalSection:AddInputText({
+    Name = "驗證碼",
+    Default = "",
+    Placeholder = "輸入6位驗證碼",
+    MaxLength = 6,
+    Flag = "VerifyCode",
+    Callback = function(text)
+        print("驗證碼:", text)
+    end
+})
+</code></pre>
+
+                <h4>AddInputText 方法</h4>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>方法</th>
+                                <th>參數</th>
+                                <th>說明</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr><td><code>SetText(str)</code></td><td>string</td><td>修改標題文字</td></tr>
+                            <tr><td><code>GetText()</code></td><td>-</td><td>獲取當前標題文字</td></tr>
+                            <tr><td><code>SetValue(value)</code></td><td>string</td><td>設定輸入值（會觸發回呼）</td></tr>
+                            <tr><td><code>GetValue()</code></td><td>-</td><td>獲取當前輸入值</td></tr>
+                            <tr><td><code>SetVisible(bool)</code></td><td>boolean</td><td>控制顯示/隱藏</td></tr>
+                            <tr><td><code>GetVisible()</code></td><td>-</td><td>獲取當前顯示狀態</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <pre><code class="language-lua">-- 動態操作
+nameInput:SetValue("新名稱")
+print(nameInput:GetValue()) -- 輸出: 新名稱
+nameInput:SetText("角色名稱")
+</code></pre>
+            </section>
+
+            <section id="add-inputnum">
+                <h2>建立數字輸入框 - 參數說明</h2>
+                <p style="margin-bottom: 20px; color: var(--text-secondary);">
+                    全寬數字輸入框元件，含 <code>-/+</code> 步進按鈕，支援數值範圍限制和小數控制。
+                </p>
+                <h4>AddInputNum 參數</h4>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>參數</th>
+                                <th>類型</th>
+                                <th>必填</th>
+                                <th>說明</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr><td><code>Name</code></td><td>string</td><td>✓</td><td>輸入框標題</td></tr>
+                            <tr><td><code>Default</code></td><td>number</td><td>✗</td><td>預設數值（預設為 0）</td></tr>
+                            <tr><td><code>Placeholder</code></td><td>string</td><td>✗</td><td>佔位符文字</td></tr>
+                            <tr><td><code>Callback</code></td><td>function</td><td>✓</td><td>數值變更時執行的函數</td></tr>
+                            <tr><td><code>Min</code></td><td>number</td><td>✗</td><td>最小值（不填則無下限）</td></tr>
+                            <tr><td><code>Max</code></td><td>number</td><td>✗</td><td>最大值（不填則無上限）</td></tr>
+                            <tr><td><code>Step</code></td><td>number</td><td>✗</td><td>+/- 按鈕的步進值（預設為 1）</td></tr>
+                            <tr><td><code>Round</code></td><td>number</td><td>✗</td><td>小數位數（預設為 0，即整數）</td></tr>
+                            <tr><td><code>Flag</code></td><td>string</td><td>✗</td><td>用於設定檔儲存的標記</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <pre><code class="language-lua">-- 基本數字輸入
+local atkInput = NormalSection:AddInputNum({
+    Name = "攻擊力",
+    Default = 100,
+    Min = 0,
+    Max = 9999,
+    Step = 10,
+    Flag = "AttackPower",
+    Callback = function(value)
+        print("攻擊力:", value)
+    end
+})
+
+-- 帶小數的精確數字輸入
+NormalSection:AddInputNum({
+    Name = "倍率",
+    Default = 1.0,
+    Min = 0.1,
+    Max = 10.0,
+    Step = 0.1,
+    Round = 1, -- 保留一位小數
+    Flag = "Multiplier",
+    Callback = function(value)
+        print("倍率:", value)
+    end
+})
+</code></pre>
+
+                <h4>AddInputNum 方法</h4>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>方法</th>
+                                <th>參數</th>
+                                <th>說明</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr><td><code>SetText(str)</code></td><td>string</td><td>修改標題文字</td></tr>
+                            <tr><td><code>GetText()</code></td><td>-</td><td>獲取當前標題文字</td></tr>
+                            <tr><td><code>SetValue(value)</code></td><td>number</td><td>設定數值（會自動 clamp 並觸發回呼）</td></tr>
+                            <tr><td><code>GetValue()</code></td><td>-</td><td>獲取當前數值</td></tr>
+                            <tr><td><code>SetMin(val)</code></td><td>number</td><td>動態修改最小值（會重新限制當前值）</td></tr>
+                            <tr><td><code>SetMax(val)</code></td><td>number</td><td>動態修改最大值（會重新限制當前值）</td></tr>
+                            <tr><td><code>SetVisible(bool)</code></td><td>boolean</td><td>控制顯示/隱藏</td></tr>
+                            <tr><td><code>GetVisible()</code></td><td>-</td><td>獲取當前顯示狀態</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <pre><code class="language-lua">-- 動態操作
+atkInput:SetValue(500)       -- 設定為 500
+print(atkInput:GetValue())   -- 輸出: 500
+atkInput:SetMax(5000)        -- 修改上限為 5000
+atkInput:SetMin(100)         -- 修改下限為 100
+atkInput:SetText("基礎攻擊")
+</code></pre>
+            </section>
+
             <section id="common-methods">
                 <h2>元件通用方法</h2>
                 <p>所有 UI 元件都支援以下通用方法來控制其顯示狀態。這讓你可以根據條件動態顯示或隱藏元件。</p>
@@ -1712,6 +1883,8 @@ AdvancedSection:SetVisible(false) -- 預設隱藏整個區塊
                             <tr><td><strong>AddLabel</strong></td><td>標籤文字</td></tr>
                             <tr><td><strong>AddParagraph</strong></td><td>段落文字</td></tr>
                             <tr><td><strong>AddTextBox</strong></td><td>文字輸入框</td></tr>
+                            <tr><td><strong>AddInputText</strong></td><td>全寬文字輸入框</td></tr>
+                            <tr><td><strong>AddInputNum</strong></td><td>數字輸入框</td></tr>
                         </tbody>
                     </table>
                 </div>

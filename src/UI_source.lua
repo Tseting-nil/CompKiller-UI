@@ -3,7 +3,7 @@
 	原始 Github:https://github.com/4lpaca-pin/CompKiller
 	修改版 Github: https://github.com/Tseting-nil/CompKiller-UI
 	具體參考:https://tseting-nil.github.io/CompKiller-UI/%E8%AA%AA%E6%98%8E%E6%9B%B8.html#load-lib
-	版本:2026/01/20
+	版本:2026/02/25
 --]]
 
 --找functuon
@@ -149,6 +149,27 @@ export type TextBoxConfig = {
 	Flag: string | nil,
 	Numeric: boolean,
 	Callback: (Text: string) -> any?
+};
+
+export type InputTextConfig = {
+	Name: string,
+	Default: string,
+	Placeholder: string,
+	Flag: string | nil,
+	MaxLength: number | nil,
+	Callback: (Text: string) -> any?
+};
+
+export type InputNumConfig = {
+	Name: string,
+	Default: number,
+	Placeholder: string,
+	Flag: string | nil,
+	Min: number | nil,
+	Max: number | nil,
+	Step: number | nil,
+	Round: number | nil,
+	Callback: (Value: number) -> any?
 };
 
 export type ColorPicker = {
@@ -6335,6 +6356,632 @@ function Compkiller:_LoadElement(Parent: Frame , EnabledLine: boolean , Signal ,
 		-- 新增 GetVisible 方法來獲取 TextBox 當前的顯示狀態
 		function Args:GetVisible()
 			return TextBox.Visible;
+		end;
+
+		if Config.Flag then
+			Compkiller.Flags[Config.Flag] = Args;
+		end;
+
+		return Args;
+	end;
+
+	function Args:AddInputText(Config: InputTextConfig)
+		Config = Compkiller.__CONFIG(Config , {
+			Name = "InputText",
+			Default = "",
+			Placeholder = "請輸入文字...",
+			MaxLength = nil,
+			Callback = function() end,
+		});
+
+		local InputFrame = Instance.new("Frame")
+		local BlockText = Instance.new("TextLabel")
+		local InputContainer = Instance.new("Frame")
+		local UIStroke = Instance.new("UIStroke")
+		local UICorner = Instance.new("UICorner")
+		local InputBox = Instance.new("TextBox")
+		local ClearButton = Instance.new("ImageButton")
+		local BlockLine = Instance.new("Frame")
+
+		if Compkiller:_IsMobile() then
+			Compkiller:_AddDragBlacklist(InputFrame);
+		end;
+
+		-- 主容器框架
+		InputFrame.Name = Compkiller:_RandomString()
+		InputFrame.Parent = Parent
+		InputFrame.BackgroundTransparency = 1.000
+		InputFrame.BorderColor3 = Color3.fromRGB(0, 0, 0)
+		InputFrame.BorderSizePixel = 0
+		InputFrame.Size = UDim2.new(1, -1, 0, 55)
+		InputFrame.ZIndex = Zindex + 1
+
+		-- 標題文字
+		BlockText.Name = Compkiller:_RandomString()
+		BlockText.Parent = InputFrame
+		BlockText.AnchorPoint = Vector2.new(0, 0)
+		BlockText.BackgroundTransparency = 1.000
+		BlockText.BorderColor3 = Color3.fromRGB(0, 0, 0)
+		BlockText.BorderSizePixel = 0
+		BlockText.Position = UDim2.new(0, 12, 0, 2)
+		BlockText.Size = UDim2.new(1, -20, 0, 20)
+		BlockText.ZIndex = Zindex + 2
+		BlockText.Font = Enum.Font.GothamMedium
+		BlockText.Text = Config.Name
+		BlockText.TextColor3 = Compkiller.Colors.SwitchColor
+		BlockText.TextSize = 14.000
+		BlockText.TextTransparency = 0.300
+		BlockText.TextXAlignment = Enum.TextXAlignment.Left
+
+		table.insert(Compkiller.Elements.SwitchColor,{
+			Element = BlockText,
+			Property = "TextColor3"
+		})
+
+		-- 輸入框容器（含圓角邊框）
+		InputContainer.Name = Compkiller:_RandomString()
+		InputContainer.Parent = InputFrame
+		InputContainer.AnchorPoint = Vector2.new(0.5, 0)
+		InputContainer.BackgroundColor3 = Compkiller.Colors.DropColor
+		InputContainer.BorderColor3 = Color3.fromRGB(0, 0, 0)
+		InputContainer.BorderSizePixel = 0
+		InputContainer.Position = UDim2.new(0.5, 0, 0, 24)
+		InputContainer.Size = UDim2.new(1, -24, 0, 24)
+		InputContainer.ZIndex = Zindex + 3
+
+		table.insert(Compkiller.Elements.DropColor,{
+			Element = InputContainer,
+			Property = "BackgroundColor3"
+		})
+
+		UIStroke.Color = Compkiller.Colors.StrokeColor
+		UIStroke.Parent = InputContainer
+
+		table.insert(Compkiller.Elements.StrokeColor,{
+			Element = UIStroke,
+			Property = "Color"
+		})
+
+		UICorner.CornerRadius = UDim.new(0, 4)
+		UICorner.Parent = InputContainer
+
+		-- 文字輸入框
+		InputBox.Name = Compkiller:_RandomString()
+		InputBox.Parent = InputContainer
+		InputBox.AnchorPoint = Vector2.new(0, 0.5)
+		InputBox.BackgroundTransparency = 1.000
+		InputBox.BorderColor3 = Color3.fromRGB(0, 0, 0)
+		InputBox.BorderSizePixel = 0
+		InputBox.ClipsDescendants = true
+		InputBox.Position = UDim2.new(0, 6, 0.5, 0)
+		InputBox.Size = UDim2.new(1, -26, 1, 0)
+		InputBox.ZIndex = Zindex + 5
+		InputBox.ClearTextOnFocus = false
+		InputBox.Font = Enum.Font.GothamMedium
+		InputBox.PlaceholderText = Config.Placeholder
+		InputBox.Text = Config.Default
+		InputBox.TextColor3 = Compkiller.Colors.SwitchColor
+		InputBox.TextSize = 12.000
+		InputBox.TextXAlignment = Enum.TextXAlignment.Left
+
+		table.insert(Compkiller.Elements.SwitchColor,{
+			Element = InputBox,
+			Property = "TextColor3"
+		})
+
+		-- 清除按鈕
+		ClearButton.Name = Compkiller:_RandomString()
+		ClearButton.Parent = InputContainer
+		ClearButton.AnchorPoint = Vector2.new(1, 0.5)
+		ClearButton.BackgroundTransparency = 1.000
+		ClearButton.BorderSizePixel = 0
+		ClearButton.Position = UDim2.new(1, -4, 0.5, 0)
+		ClearButton.Size = UDim2.new(0, 14, 0, 14)
+		ClearButton.ZIndex = Zindex + 6
+		ClearButton.Image = Compkiller:CacheImage("rbxassetid://10747362393") -- lucide-x
+		ClearButton.ImageColor3 = Compkiller.Colors.SwitchColor
+		ClearButton.ImageTransparency = 0.500
+		ClearButton.ScaleType = Enum.ScaleType.Fit
+		ClearButton.Visible = (Config.Default ~= "")
+
+		-- 底部分隔線
+		BlockLine.Name = Compkiller:_RandomString()
+		BlockLine.Parent = InputFrame
+		BlockLine.AnchorPoint = Vector2.new(0.5, 1)
+		BlockLine.BackgroundColor3 = Compkiller.Colors.LineColor
+		BlockLine.BackgroundTransparency = 0.500
+		BlockLine.BorderColor3 = Color3.fromRGB(0, 0, 0)
+		BlockLine.BorderSizePixel = 0
+		BlockLine.Position = UDim2.new(0.5, 0, 1, 0)
+		BlockLine.Size = UDim2.new(1, -26, 0, 1)
+		BlockLine.ZIndex = Zindex + 3;
+
+		table.insert(Compkiller.Elements.LineColor,{
+			Element = BlockLine,
+			Property = "BackgroundColor3"
+		})
+
+		-- Hover 效果
+		Compkiller:_Hover(InputContainer,function()
+			Compkiller:_Animation(UIStroke,TweenInfo.new(0.2),{
+				Color = Compkiller.Colors.Highlight
+			});
+		end,function()
+			Compkiller:_Animation(UIStroke,TweenInfo.new(0.2),{
+				Color = Compkiller.Colors.StrokeColor
+			});
+		end);
+
+		-- 更新清除按鈕可見性
+		local UpdateClearButton = function()
+			ClearButton.Visible = (InputBox.Text ~= "");
+		end;
+
+		-- 清除按鈕點擊事件
+		ClearButton.MouseButton1Click:Connect(function()
+			InputBox.Text = "";
+			Config.Default = "";
+			task.spawn(Config.Callback, "");
+			UpdateClearButton();
+		end);
+
+		-- 文字變更事件
+		InputBox:GetPropertyChangedSignal('Text'):Connect(function()
+			local text = InputBox.Text;
+
+			-- 最大長度限制
+			if Config.MaxLength and #text > Config.MaxLength then
+				text = string.sub(text, 1, Config.MaxLength);
+				InputBox.Text = text;
+				return;
+			end;
+
+			Config.Default = text;
+			task.spawn(Config.Callback, text);
+			UpdateClearButton();
+		end);
+
+		local Args = {};
+
+		Args.Flag = Config.Flag;
+
+		function Args:SetText(str : string)
+			BlockText.Text = str or Config.Name
+		end;
+
+		function Args:GetText()
+			return BlockText.Text;
+		end;
+
+		function Args:SetValue(Value)
+			Config.Default = tostring(Value);
+			InputBox.Text = Config.Default;
+			Config.Callback(Config.Default);
+		end;
+
+		function Args:GetValue()
+			return Config.Default;
+		end;
+
+		Args.Signal = Signal:Connect(function(bool)
+			if bool then
+				Compkiller:_Animation(BlockText,TweenInfo.new(0.2),{
+					TextTransparency = 0.3
+				});
+				Compkiller:_Animation(BlockLine,TweenInfo.new(0.2),{
+					BackgroundTransparency = 0.5
+				});
+				Compkiller:_Animation(UIStroke,TweenInfo.new(0.2),{
+					Transparency = 0
+				});
+				Compkiller:_Animation(InputContainer,TweenInfo.new(0.2),{
+					BackgroundTransparency = 0
+				});
+				Compkiller:_Animation(InputBox,TweenInfo.new(0.2),{
+					TextTransparency = 0
+				});
+			else
+				Compkiller:_Animation(BlockText,TweenInfo.new(0.2),{
+					TextTransparency = 1
+				});
+				Compkiller:_Animation(BlockLine,TweenInfo.new(0.2),{
+					BackgroundTransparency = 1
+				});
+				Compkiller:_Animation(UIStroke,TweenInfo.new(0.2),{
+					Transparency = 1
+				});
+				Compkiller:_Animation(InputContainer,TweenInfo.new(0.2),{
+					BackgroundTransparency = 1
+				});
+				Compkiller:_Animation(InputBox,TweenInfo.new(0.2),{
+					TextTransparency = 1
+				});
+			end;
+		end);
+
+		-- 新增 SetVisible 方法來控制 InputText 的顯示/隱藏
+		function Args:SetVisible(bool)
+			InputFrame.Visible = bool;
+		end;
+
+		-- 新增 GetVisible 方法來獲取 InputText 當前的顯示狀態
+		function Args:GetVisible()
+			return InputFrame.Visible;
+		end;
+
+		if Config.Flag then
+			Compkiller.Flags[Config.Flag] = Args;
+		end;
+
+		return Args;
+	end;
+
+	function Args:AddInputNum(Config: InputNumConfig)
+		Config = Compkiller.__CONFIG(Config , {
+			Name = "InputNum",
+			Default = 0,
+			Placeholder = "請輸入數字...",
+			Min = nil,
+			Max = nil,
+			Step = 1,
+			Round = 0,
+			Callback = function() end,
+		});
+
+		local InputFrame = Instance.new("Frame")
+		local BlockText = Instance.new("TextLabel")
+		local InputContainer = Instance.new("Frame")
+		local UIStroke = Instance.new("UIStroke")
+		local UICorner = Instance.new("UICorner")
+		local InputBox = Instance.new("TextBox")
+		local MinusButton = Instance.new("TextButton")
+		local PlusButton = Instance.new("TextButton")
+		local MinusCorner = Instance.new("UICorner")
+		local PlusCorner = Instance.new("UICorner")
+		local BlockLine = Instance.new("Frame")
+
+		if Compkiller:_IsMobile() then
+			Compkiller:_AddDragBlacklist(InputFrame);
+		end;
+
+		-- 四捨五入工具函數
+		local RoundNum = function(num)
+			if Config.Round == 0 then
+				return math.floor(num + 0.5);
+			end;
+			local mult = 10 ^ Config.Round;
+			return math.floor(num * mult + 0.5) / mult;
+		end;
+
+		-- 數值範圍限制
+		local ClampValue = function(val)
+			if Config.Min and val < Config.Min then
+				val = Config.Min;
+			end;
+			if Config.Max and val > Config.Max then
+				val = Config.Max;
+			end;
+			return RoundNum(val);
+		end;
+
+		-- 主容器框架
+		InputFrame.Name = Compkiller:_RandomString()
+		InputFrame.Parent = Parent
+		InputFrame.BackgroundTransparency = 1.000
+		InputFrame.BorderColor3 = Color3.fromRGB(0, 0, 0)
+		InputFrame.BorderSizePixel = 0
+		InputFrame.Size = UDim2.new(1, -1, 0, 55)
+		InputFrame.ZIndex = Zindex + 1
+
+		-- 標題文字
+		BlockText.Name = Compkiller:_RandomString()
+		BlockText.Parent = InputFrame
+		BlockText.AnchorPoint = Vector2.new(0, 0)
+		BlockText.BackgroundTransparency = 1.000
+		BlockText.BorderColor3 = Color3.fromRGB(0, 0, 0)
+		BlockText.BorderSizePixel = 0
+		BlockText.Position = UDim2.new(0, 12, 0, 2)
+		BlockText.Size = UDim2.new(1, -20, 0, 20)
+		BlockText.ZIndex = Zindex + 2
+		BlockText.Font = Enum.Font.GothamMedium
+		BlockText.Text = Config.Name
+		BlockText.TextColor3 = Compkiller.Colors.SwitchColor
+		BlockText.TextSize = 14.000
+		BlockText.TextTransparency = 0.300
+		BlockText.TextXAlignment = Enum.TextXAlignment.Left
+
+		table.insert(Compkiller.Elements.SwitchColor,{
+			Element = BlockText,
+			Property = "TextColor3"
+		})
+
+		-- 輸入框容器
+		InputContainer.Name = Compkiller:_RandomString()
+		InputContainer.Parent = InputFrame
+		InputContainer.AnchorPoint = Vector2.new(0.5, 0)
+		InputContainer.BackgroundColor3 = Compkiller.Colors.DropColor
+		InputContainer.BorderColor3 = Color3.fromRGB(0, 0, 0)
+		InputContainer.BorderSizePixel = 0
+		InputContainer.Position = UDim2.new(0.5, 0, 0, 24)
+		InputContainer.Size = UDim2.new(1, -24, 0, 24)
+		InputContainer.ZIndex = Zindex + 3
+
+		table.insert(Compkiller.Elements.DropColor,{
+			Element = InputContainer,
+			Property = "BackgroundColor3"
+		})
+
+		UIStroke.Color = Compkiller.Colors.StrokeColor
+		UIStroke.Parent = InputContainer
+
+		table.insert(Compkiller.Elements.StrokeColor,{
+			Element = UIStroke,
+			Property = "Color"
+		})
+
+		UICorner.CornerRadius = UDim.new(0, 4)
+		UICorner.Parent = InputContainer
+
+		-- 減少按鈕 (-)
+		MinusButton.Name = Compkiller:_RandomString()
+		MinusButton.Parent = InputContainer
+		MinusButton.AnchorPoint = Vector2.new(0, 0.5)
+		MinusButton.BackgroundColor3 = Compkiller.Colors.BlockBackground
+		MinusButton.BackgroundTransparency = 0.500
+		MinusButton.BorderSizePixel = 0
+		MinusButton.Position = UDim2.new(0, 2, 0.5, 0)
+		MinusButton.Size = UDim2.new(0, 22, 0, 20)
+		MinusButton.ZIndex = Zindex + 6
+		MinusButton.Font = Enum.Font.GothamBold
+		MinusButton.Text = "-"
+		MinusButton.TextColor3 = Compkiller.Colors.SwitchColor
+		MinusButton.TextSize = 14.000
+		MinusButton.AutoButtonColor = false
+
+		MinusCorner.CornerRadius = UDim.new(0, 3)
+		MinusCorner.Parent = MinusButton
+
+		table.insert(Compkiller.Elements.SwitchColor,{
+			Element = MinusButton,
+			Property = "TextColor3"
+		})
+
+		table.insert(Compkiller.Elements.BlockBackground,{
+			Element = MinusButton,
+			Property = "BackgroundColor3"
+		})
+
+		-- 增加按鈕 (+)
+		PlusButton.Name = Compkiller:_RandomString()
+		PlusButton.Parent = InputContainer
+		PlusButton.AnchorPoint = Vector2.new(1, 0.5)
+		PlusButton.BackgroundColor3 = Compkiller.Colors.BlockBackground
+		PlusButton.BackgroundTransparency = 0.500
+		PlusButton.BorderSizePixel = 0
+		PlusButton.Position = UDim2.new(1, -2, 0.5, 0)
+		PlusButton.Size = UDim2.new(0, 22, 0, 20)
+		PlusButton.ZIndex = Zindex + 6
+		PlusButton.Font = Enum.Font.GothamBold
+		PlusButton.Text = "+"
+		PlusButton.TextColor3 = Compkiller.Colors.SwitchColor
+		PlusButton.TextSize = 14.000
+		PlusButton.AutoButtonColor = false
+
+		PlusCorner.CornerRadius = UDim.new(0, 3)
+		PlusCorner.Parent = PlusButton
+
+		table.insert(Compkiller.Elements.SwitchColor,{
+			Element = PlusButton,
+			Property = "TextColor3"
+		})
+
+		table.insert(Compkiller.Elements.BlockBackground,{
+			Element = PlusButton,
+			Property = "BackgroundColor3"
+		})
+
+		-- 數字輸入框（在 - 和 + 按鈕之間）
+		InputBox.Name = Compkiller:_RandomString()
+		InputBox.Parent = InputContainer
+		InputBox.AnchorPoint = Vector2.new(0.5, 0.5)
+		InputBox.BackgroundTransparency = 1.000
+		InputBox.BorderColor3 = Color3.fromRGB(0, 0, 0)
+		InputBox.BorderSizePixel = 0
+		InputBox.ClipsDescendants = true
+		InputBox.Position = UDim2.new(0.5, 0, 0.5, 0)
+		InputBox.Size = UDim2.new(1, -54, 1, 0)
+		InputBox.ZIndex = Zindex + 5
+		InputBox.ClearTextOnFocus = false
+		InputBox.Font = Enum.Font.GothamMedium
+		InputBox.PlaceholderText = Config.Placeholder
+		InputBox.Text = tostring(Config.Default)
+		InputBox.TextColor3 = Compkiller.Colors.SwitchColor
+		InputBox.TextSize = 12.000
+		InputBox.TextXAlignment = Enum.TextXAlignment.Center
+
+		table.insert(Compkiller.Elements.SwitchColor,{
+			Element = InputBox,
+			Property = "TextColor3"
+		})
+
+		-- 底部分隔線
+		BlockLine.Name = Compkiller:_RandomString()
+		BlockLine.Parent = InputFrame
+		BlockLine.AnchorPoint = Vector2.new(0.5, 1)
+		BlockLine.BackgroundColor3 = Compkiller.Colors.LineColor
+		BlockLine.BackgroundTransparency = 0.500
+		BlockLine.BorderColor3 = Color3.fromRGB(0, 0, 0)
+		BlockLine.BorderSizePixel = 0
+		BlockLine.Position = UDim2.new(0.5, 0, 1, 0)
+		BlockLine.Size = UDim2.new(1, -26, 0, 1)
+		BlockLine.ZIndex = Zindex + 3;
+
+		table.insert(Compkiller.Elements.LineColor,{
+			Element = BlockLine,
+			Property = "BackgroundColor3"
+		})
+
+		-- Hover 效果
+		Compkiller:_Hover(InputContainer,function()
+			Compkiller:_Animation(UIStroke,TweenInfo.new(0.2),{
+				Color = Compkiller.Colors.Highlight
+			});
+		end,function()
+			Compkiller:_Animation(UIStroke,TweenInfo.new(0.2),{
+				Color = Compkiller.Colors.StrokeColor
+			});
+		end);
+
+		-- +/- 按鈕 Hover 效果
+		Compkiller:_Hover(MinusButton,function()
+			Compkiller:_Animation(MinusButton,TweenInfo.new(0.15),{
+				BackgroundTransparency = 0.2
+			});
+		end,function()
+			Compkiller:_Animation(MinusButton,TweenInfo.new(0.15),{
+				BackgroundTransparency = 0.5
+			});
+		end);
+
+		Compkiller:_Hover(PlusButton,function()
+			Compkiller:_Animation(PlusButton,TweenInfo.new(0.15),{
+				BackgroundTransparency = 0.2
+			});
+		end,function()
+			Compkiller:_Animation(PlusButton,TweenInfo.new(0.15),{
+				BackgroundTransparency = 0.5
+			});
+		end);
+
+		-- 應用數值並觸發回呼
+		local ApplyValue = function(val)
+			val = ClampValue(val);
+			Config.Default = val;
+			InputBox.Text = tostring(val);
+			task.spawn(Config.Callback, val);
+		end;
+
+		-- 減少按鈕點擊
+		MinusButton.MouseButton1Click:Connect(function()
+			local current = tonumber(Config.Default) or 0;
+			ApplyValue(current - Config.Step);
+		end);
+
+		-- 增加按鈕點擊
+		PlusButton.MouseButton1Click:Connect(function()
+			local current = tonumber(Config.Default) or 0;
+			ApplyValue(current + Config.Step);
+		end);
+
+		-- 文字變更事件（數字驗證）
+		InputBox.FocusLost:Connect(function()
+			local text = InputBox.Text;
+			local cleaned = string.gsub(text, '[^0-9%.%-]', '');
+			local num = tonumber(cleaned);
+
+			if num then
+				ApplyValue(num);
+			else
+				-- 無效輸入時恢復為預設值
+				InputBox.Text = tostring(Config.Default);
+			end;
+		end);
+
+		local Args = {};
+
+		Args.Flag = Config.Flag;
+
+		function Args:SetText(str : string)
+			BlockText.Text = str or Config.Name
+		end;
+
+		function Args:GetText()
+			return BlockText.Text;
+		end;
+
+		function Args:SetValue(Value)
+			local num = tonumber(Value);
+			if num then
+				ApplyValue(num);
+			end;
+		end;
+
+		function Args:GetValue()
+			return Config.Default;
+		end;
+
+		function Args:SetMin(val)
+			Config.Min = val;
+			-- 重新 clamp 當前值
+			ApplyValue(Config.Default);
+		end;
+
+		function Args:SetMax(val)
+			Config.Max = val;
+			-- 重新 clamp 當前值
+			ApplyValue(Config.Default);
+		end;
+
+		Args.Signal = Signal:Connect(function(bool)
+			if bool then
+				Compkiller:_Animation(BlockText,TweenInfo.new(0.2),{
+					TextTransparency = 0.3
+				});
+				Compkiller:_Animation(BlockLine,TweenInfo.new(0.2),{
+					BackgroundTransparency = 0.5
+				});
+				Compkiller:_Animation(UIStroke,TweenInfo.new(0.2),{
+					Transparency = 0
+				});
+				Compkiller:_Animation(InputContainer,TweenInfo.new(0.2),{
+					BackgroundTransparency = 0
+				});
+				Compkiller:_Animation(InputBox,TweenInfo.new(0.2),{
+					TextTransparency = 0
+				});
+				Compkiller:_Animation(MinusButton,TweenInfo.new(0.2),{
+					TextTransparency = 0,
+					BackgroundTransparency = 0.5
+				});
+				Compkiller:_Animation(PlusButton,TweenInfo.new(0.2),{
+					TextTransparency = 0,
+					BackgroundTransparency = 0.5
+				});
+			else
+				Compkiller:_Animation(BlockText,TweenInfo.new(0.2),{
+					TextTransparency = 1
+				});
+				Compkiller:_Animation(BlockLine,TweenInfo.new(0.2),{
+					BackgroundTransparency = 1
+				});
+				Compkiller:_Animation(UIStroke,TweenInfo.new(0.2),{
+					Transparency = 1
+				});
+				Compkiller:_Animation(InputContainer,TweenInfo.new(0.2),{
+					BackgroundTransparency = 1
+				});
+				Compkiller:_Animation(InputBox,TweenInfo.new(0.2),{
+					TextTransparency = 1
+				});
+				Compkiller:_Animation(MinusButton,TweenInfo.new(0.2),{
+					TextTransparency = 1,
+					BackgroundTransparency = 1
+				});
+				Compkiller:_Animation(PlusButton,TweenInfo.new(0.2),{
+					TextTransparency = 1,
+					BackgroundTransparency = 1
+				});
+			end;
+		end);
+
+		-- 新增 SetVisible 方法來控制 InputNum 的顯示/隱藏
+		function Args:SetVisible(bool)
+			InputFrame.Visible = bool;
+		end;
+
+		-- 新增 GetVisible 方法來獲取 InputNum 當前的顯示狀態
+		function Args:GetVisible()
+			return InputFrame.Visible;
 		end;
 
 		if Config.Flag then
