@@ -3,7 +3,7 @@
 	原始 Github:https://github.com/4lpaca-pin/CompKiller
 	修改版 Github: https://github.com/Tseting-nil/CompKiller-UI
 	具體參考:https://tseting-nil.github.io/CompKiller-UI/%E8%AA%AA%E6%98%8E%E6%9B%B8.html#load-lib
-	版本:2026/02/25
+	版本:2026/02/26
 --]]
 
 --找functuon
@@ -6501,6 +6501,37 @@ function Compkiller:_LoadElement(Parent: Frame , EnabledLine: boolean , Signal ,
 			Property = "BackgroundColor3"
 		})
 
+		-- Link 連結容器
+		local LinkValues = Instance.new("Frame")
+		local LinkListLayout = Instance.new("UIListLayout")
+
+		LinkValues.Name = Compkiller:_RandomString()
+		LinkValues.Parent = InputFrame
+		LinkValues.AnchorPoint = Vector2.new(1, 0)
+		LinkValues.BackgroundTransparency = 1.000
+		LinkValues.BorderColor3 = Color3.fromRGB(0, 0, 0)
+		LinkValues.BorderSizePixel = 0
+		LinkValues.Position = UDim2.new(1, -12, 0, 3)
+		LinkValues.Size = UDim2.new(1, 0, 0, 18)
+		LinkValues.ZIndex = Zindex + 2
+
+		LinkListLayout.Parent = LinkValues
+		LinkListLayout.FillDirection = Enum.FillDirection.Horizontal
+		LinkListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
+		LinkListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+		LinkListLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+		LinkListLayout.Padding = UDim.new(0, 8)
+
+		-- 建立 Link 包裝物件（模擬 _CreateBlock 回傳的 Block）
+		local LinkBlock = {
+			Root = InputFrame,
+			Tween = TweenInfo.new(0.25),
+		}
+
+		function LinkBlock:AddLink(Name, Default, ToggleColor, ToggleColor_close)
+			return Compkiller:_AddLinkValue(Name, Default, InputFrame, LinkValues, LinkBlock, Signal, ToggleColor, ToggleColor_close);
+		end;
+
 		-- Hover 效果
 		Compkiller:_Hover(InputContainer,function()
 			Compkiller:_Animation(UIStroke,TweenInfo.new(0.2),{
@@ -6598,6 +6629,9 @@ function Compkiller:_LoadElement(Parent: Frame , EnabledLine: boolean , Signal ,
 				});
 			end;
 		end);
+
+		-- 設定 Link 連結
+		Args.Link = Compkiller:_LoadOption(LinkBlock);
 
 		-- 新增 SetVisible 方法來控制 InputText 的顯示/隱藏
 		function Args:SetVisible(bool)
@@ -6821,6 +6855,37 @@ function Compkiller:_LoadElement(Parent: Frame , EnabledLine: boolean , Signal ,
 			Property = "BackgroundColor3"
 		})
 
+		-- Link 連結容器
+		local LinkValues = Instance.new("Frame")
+		local LinkListLayout = Instance.new("UIListLayout")
+
+		LinkValues.Name = Compkiller:_RandomString()
+		LinkValues.Parent = InputFrame
+		LinkValues.AnchorPoint = Vector2.new(1, 0)
+		LinkValues.BackgroundTransparency = 1.000
+		LinkValues.BorderColor3 = Color3.fromRGB(0, 0, 0)
+		LinkValues.BorderSizePixel = 0
+		LinkValues.Position = UDim2.new(1, -12, 0, 3)
+		LinkValues.Size = UDim2.new(1, 0, 0, 18)
+		LinkValues.ZIndex = Zindex + 2
+
+		LinkListLayout.Parent = LinkValues
+		LinkListLayout.FillDirection = Enum.FillDirection.Horizontal
+		LinkListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
+		LinkListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+		LinkListLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+		LinkListLayout.Padding = UDim.new(0, 8)
+
+		-- 建立 Link 包裝物件（模擬 _CreateBlock 回傳的 Block）
+		local LinkBlock = {
+			Root = InputFrame,
+			Tween = TweenInfo.new(0.25),
+		}
+
+		function LinkBlock:AddLink(Name, Default, ToggleColor, ToggleColor_close)
+			return Compkiller:_AddLinkValue(Name, Default, InputFrame, LinkValues, LinkBlock, Signal, ToggleColor, ToggleColor_close);
+		end;
+
 		-- Hover 效果
 		Compkiller:_Hover(InputContainer,function()
 			Compkiller:_Animation(UIStroke,TweenInfo.new(0.2),{
@@ -6973,6 +7038,9 @@ function Compkiller:_LoadElement(Parent: Frame , EnabledLine: boolean , Signal ,
 				});
 			end;
 		end);
+
+		-- 設定 Link 連結
+		Args.Link = Compkiller:_LoadOption(LinkBlock);
 
 		-- 新增 SetVisible 方法來控制 InputNum 的顯示/隱藏
 		function Args:SetVisible(bool)
