@@ -465,6 +465,7 @@ Compkiller.Elements = {
 Compkiller.DragBlacklist = {};
 Compkiller.IaDrag = false;
 Compkiller.LastDrag = tick();
+Compkiller.DragLocked = false; -- 控制UI是否固定（禁止移動）
 Compkiller.Flags = {};
 
 Compkiller.Lucide = {
@@ -1750,7 +1751,8 @@ function Compkiller:_Blur(element : Frame , WindowRemote) : RBXScriptSignal
 	return rbxsignal;
 end;
 
-function Compkiller:_AddDragBlacklist(Frame: Frame)
+-- Condition: 可選函數，返回 true 才允許加入黑名單（用於「只有可捲動時才鎖定拖動」）
+function Compkiller:_AddDragBlacklist(Frame: Frame, Condition)
 	local IsAdded = false;
 	local BASE_TIME = 0.01;
 
@@ -1769,8 +1771,15 @@ function Compkiller:_AddDragBlacklist(Frame: Frame)
 	end;
 
 	Frame.InputBegan:Connect(function(input)
-		if Compkiller:_IsMouseOverFrame(Frame) then
-			SET_BLACKLIST(true)
+		-- 手機觸控時 Mouse.X/Y 尚未更新，改用 input.Position 做邊界判斷
+		local pos = input.Position
+		local AbsPos = Frame.AbsolutePosition
+		local AbsSize = Frame.AbsoluteSize
+		if pos.X >= AbsPos.X and pos.X <= AbsPos.X + AbsSize.X and pos.Y >= AbsPos.Y and pos.Y <= AbsPos.Y + AbsSize.Y then
+			-- 若有條件函數，只在條件成立時才加入黑名單
+			if not Condition or Condition() then
+				SET_BLACKLIST(true)
+			end;
 		end;
 	end);
 
@@ -10099,8 +10108,9 @@ function Compkiller.new(Config : Window)
 			Upvalue.Right = Right;
 
 			if Compkiller:_IsMobile() then
-				Compkiller:_AddDragBlacklist(Left);
-				Compkiller:_AddDragBlacklist(Right);
+				-- 只有當內容超出可視範圍（實際可捲動）時才鎖定拖動
+				Compkiller:_AddDragBlacklist(Left, function() return Left.CanvasSize.Y.Offset > Left.AbsoluteSize.Y end);
+				Compkiller:_AddDragBlacklist(Right, function() return Right.CanvasSize.Y.Offset > Right.AbsoluteSize.Y end);
 			end;
 
 			TabOpenSignal = Internal.Signal;
@@ -10268,9 +10278,10 @@ function Compkiller.new(Config : Window)
 			WindowArgs:AddUnbind(UIListLayout_2 , Right);
 			WindowArgs:AddUnbind(UIListLayout , Left);
 
-			if Compkiller:_IsMobile() then
-				Compkiller:_AddDragBlacklist(Left);
-				Compkiller:_AddDragBlacklist(Right);
+			if UserInputService.TouchEnabled then
+				-- 只有當內容超出可視範圍（實際可捲動）時才鎖定拖動
+				Compkiller:_AddDragBlacklist(Left, function() return Left.CanvasSize.Y.Offset > Left.AbsoluteSize.Y end);
+				Compkiller:_AddDragBlacklist(Right, function() return Right.CanvasSize.Y.Offset > Right.AbsoluteSize.Y end);
 			end;
 
 			if TabConfig.Type == "Single" then
@@ -11165,6 +11176,16 @@ function Compkiller.new(Config : Window)
 
 	function WindowArgs:SetMenuKey(new: string | Enum.KeyCode)
 		Config.Keybind = new;
+	end;
+
+	-- 固定/解鎖 UI 位置（true = 固定，無法拖動；false = 可拖動）
+	function WindowArgs:SetLocked(bool: boolean)
+		Compkiller.DragLocked = bool;
+	end;
+
+	-- 獲取 UI 是否處於固定狀態
+	function WindowArgs:IsLocked(): boolean
+		return Compkiller.DragLocked;
 	end;
 
 	function WindowArgs:Destroy()

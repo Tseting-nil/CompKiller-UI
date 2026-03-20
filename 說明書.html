@@ -239,7 +239,7 @@
             <h1>Compkiller UI</h1>
             <div class="version-info">
                 <div>版本: 2026/02/26</div>
-                <div>最後更新: 2026/02/26</div>
+                <div>最後更新: 2026/03/20</div>
             </div>
         </div>
         <nav class="sidebar-nav">
@@ -315,9 +315,24 @@
                             <tr><td><code>Window:SetVisible(bool)</code></td><td>控制 UI 的顯示 / 隱藏</td></tr>
                             <tr><td><code>Window:Toggle(bool)</code></td><td>切換 UI 的開關狀態</td></tr>
                             <tr><td><code>Window:Destroy()</code></td><td>完全銷毀 UI（不可逆）</td></tr>
+                            <tr><td><code>Window:SetLocked(bool)</code></td><td>固定 / 解除固定 UI 位置（禁止 / 允許拖動）</td></tr>
+                            <tr><td><code>Window:IsLocked()</code></td><td>獲取 UI 是否處於固定（無法移動）狀態</td></tr>
                         </tbody>
                     </table>
                 </div>
+                <pre><code class="language-lua">Window:SetLocked(true)    -- 固定 UI，禁止拖動
+Window:SetLocked(false)   -- 解除固定，允許拖動
+print(Window:IsLocked())  -- 輸出是否固定（true/false）
+
+-- 搭配 Toggle 動態控制
+Section:AddToggle({
+    Name = "鎖定UI位置",
+    Default = false,
+    Callback = function(Value)
+        Window:SetLocked(Value)
+    end,
+})
+</code></pre>
             </section>
 
             <hr>
