@@ -11101,10 +11101,13 @@ function Compkiller.new(Config : Window)
 		end;
 
 		function WindowArgs:Toggle(Value: boolean)
+			WindowArgs.IsOpen = Value;
+
 			if WindowArgs.PerformanceMode then
 				MainFrame.Visible = Value;
 			end;
 
+			ToggleCloseUI(not Value);
 			WindowOpen:Fire(Value);
 
 			if Value then
