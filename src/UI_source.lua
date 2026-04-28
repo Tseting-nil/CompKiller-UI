@@ -10640,7 +10640,7 @@ function Compkiller.new(Config : Window)
 						});
 					else
 						Compkiller:_Animation(Section,TweenInfo.new(0.4,Enum.EasingStyle.Quint),{
-							Size = UDim2.new(1, 0, 0, math.abs(UIListLayout.AbsoluteContentSize.Y) - 1)
+							Size = UDim2.new(1, 0, 0, math.max(0, UIListLayout.AbsoluteContentSize.Y - 1))
 						});
 
 						if Section:GetAttribute('Lasth') and UIListLayout.AbsoluteContentSize.Y > Section:GetAttribute('Lasth') then
@@ -10702,7 +10702,7 @@ function Compkiller.new(Config : Window)
 							end;
 						end;
 
-						local remainingHeight = UIListLayout.AbsoluteContentSize.Y + (Parent.AbsoluteSize.Y - (parentScale));
+						local remainingHeight = UIListLayout.AbsoluteContentSize.Y + math.max(0, Parent.AbsoluteSize.Y - parentScale);
 
 						if Section:GetAttribute('Lasth') then
 							remainingHeight = math.max(remainingHeight , Section:GetAttribute('Lasth'));

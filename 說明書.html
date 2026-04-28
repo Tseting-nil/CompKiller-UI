@@ -239,7 +239,7 @@
             <h1>Compkiller UI</h1>
             <div class="version-info">
                 <div>版本: 2026/02/26</div>
-                <div>最後更新: 2026/03/20</div>
+                <div>最後更新: 2026/04/08</div>
             </div>
         </div>
         <nav class="sidebar-nav">
@@ -248,6 +248,8 @@
                 <li><h3>視窗與標籤</h3></li>
                 <li><a href="#create-window">建立視窗</a></li>
                 <li><a href="#window-methods">視窗控制方法</a></li>
+                <li><a href="#window-update">Update 用戶資訊欄</a></li>
+                <li><a href="#user-settings">UserSettings 浮動面板</a></li>
                 <li><a href="#layout">介面結構</a></li>
                 <li><h3>UI 元件</h3></li>
                 <li><a href="#add-toggle">AddToggle 開關</a></li>
@@ -317,6 +319,7 @@
                             <tr><td><code>Window:Destroy()</code></td><td>完全銷毀 UI（不可逆）</td></tr>
                             <tr><td><code>Window:SetLocked(bool)</code></td><td>固定 / 解除固定 UI 位置（禁止 / 允許拖動）</td></tr>
                             <tr><td><code>Window:IsLocked()</code></td><td>獲取 UI 是否處於固定（無法移動）狀態</td></tr>
+                            <tr><td><code>Window:Update(config)</code></td><td>更新左下角用戶資訊欄及視窗標題</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -332,6 +335,57 @@ Section:AddToggle({
         Window:SetLocked(Value)
     end,
 })
+</code></pre>
+            </section>
+
+            <section id="window-update">
+                <h3>Window:Update — 左下角用戶資訊</h3>
+                <p>控制左側欄底部的用戶資訊區塊（頭像、名稱、過期日期）及視窗標題。未傳入的欄位保持預設值。</p>
+                <div class="table-container">
+                    <table>
+                        <thead><tr><th>參數</th><th>類型</th><th>說明</th><th>預設值</th></tr></thead>
+                        <tbody>
+                            <tr><td><code>Username</code></td><td>string</td><td>左下角顯示的用戶名稱</td><td>玩家的 <code>DisplayName</code></td></tr>
+                            <tr><td><code>ExpireDate</code></td><td>string</td><td>左下角顯示的過期日期</td><td><code>"NEVER"</code></td></tr>
+                            <tr><td><code>UserProfile</code></td><td>string</td><td>左下角頭像圖片（rbxassetid 或縮圖 URL）</td><td>玩家頭像縮圖</td></tr>
+                            <tr><td><code>Logo</code></td><td>string</td><td>左側欄頂部的 Logo 圖示</td><td>建立視窗時傳入的 Logo</td></tr>
+                            <tr><td><code>WindowName</code></td><td>string</td><td>左側欄頂部的視窗標題</td><td>建立視窗時傳入的 Name</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <pre><code class="language-lua">Window:Update({
+    Username = "玩家名稱",
+    ExpireDate = "2025/12/31",
+    UserProfile = "rbxassetid://xxxxx",
+    Logo = "rbxassetid://xxxxx",
+    WindowName = "我的腳本",
+})
+</code></pre>
+            </section>
+
+            <section id="user-settings">
+                <h3>Window.UserSettings — 左下角浮動設定面板</h3>
+                <p>點擊左下角用戶資訊區塊時彈出的浮動面板（235px 寬，高度自動撐開）。呼叫 <code>:Create()</code> 後方可使用，且必須在建立標籤之前呼叫。</p>
+                <div class="table-container">
+                    <table>
+                        <thead><tr><th>方法</th><th>說明</th></tr></thead>
+                        <tbody>
+                            <tr><td><code>Window.UserSettings:Create()</code></td><td>初始化面板，回傳 Section（可新增 UI 元件）</td></tr>
+                            <tr><td><code>Window.UserSettings:Window(bool)</code></td><td>手動顯示 / 隱藏面板（需先呼叫 Create）</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <pre><code class="language-lua">-- 初始化並在面板內加入元件
+local UserPanel = Window.UserSettings:Create()
+UserPanel:AddToggle({
+    Name = "設定選項",
+    Default = false,
+    Callback = function(Value) end,
+})
+
+-- 手動控制顯示
+Window.UserSettings:Window(true)   -- 開啟
+Window.UserSettings:Window(false)  -- 關閉
 </code></pre>
             </section>
 
