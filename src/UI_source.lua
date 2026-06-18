@@ -3,7 +3,7 @@
 	原始 Github:https://github.com/4lpaca-pin/CompKiller
 	修改版 Github: https://github.com/Tseting-nil/CompKiller-UI
 	具體參考:https://tseting-nil.github.io/CompKiller-UI/%E8%AA%AA%E6%98%8E%E6%9B%B8.html#load-lib
-	版本:2026/02/26
+	版本:2026/06/18
 --]]
 
 --找functuon
@@ -400,6 +400,166 @@ local LocalPlayer: Player = Players.LocalPlayer;
 local CoreGui: PlayerGui = (gethui and gethui()) or (get_hidden_gui and get_hidden_gui()) or cloneref(game:FindFirstChild('CoreGui')) or cloneref(LocalPlayer.PlayerGui);
 local Mouse: Mouse = LocalPlayer:GetMouse();
 local CurrentCamera: Camera? = cloneref(workspace.CurrentCamera);
+
+-- UI 掛在 CoreGui (gethui) 底下。主執行緒能正常存取，但引擎觸發的 signal callback
+-- (InputChanged / GetPropertyChangedSignal 等) 跑在另一個 thread，讀 CoreGui 內 Instance 屬性會丟
+-- "The current thread cannot access 'Instance' (lacking capability Plugin)"。
+-- 解法：在 callback 內把 thread identity 切到「能存取 CoreGui」的值，存取完再還原。
+-- 哪個 identity 可行因執行器/遊戲而異（不一定是 2 或 8），所以用一個隱藏 probe frame 自我校準：
+-- 真的讀失敗時才掃 8→0，找出第一個讀得到的 identity 並快取，下次直接用。
+local getthreadidentity = getthreadidentity or get_thread_identity or getidentity or getthreadcontext or (syn and syn.get_thread_identity);
+local setthreadidentity = setthreadidentity or set_thread_identity or setidentity or setthreadcontext or (syn and syn.set_thread_identity);
+
+-- 隱藏 probe frame（CoreGui 子物件）：在 callback thread 裡測哪個 identity 讀得到屬性
+local _ProbeFrame;
+pcall(function()
+	_ProbeFrame = Instance.new('Frame');
+	_ProbeFrame.Name = string.sub(tostring({}), 7);
+	_ProbeFrame.Visible = false;
+	_ProbeFrame.Parent = CoreGui;
+end);
+
+local _UI_IDENTITY;                       -- 上次成功的 identity（快取）
+local _CALIB_LOGGED = false;              -- 只 warn 一次
+local _CANDIDATES = { 8, 7, 6, 5, 4, 3, 2, 1, 0 };
+
+-- probe 要測「實際會用到的全部操作」：讀屬性 + 寫屬性 + TweenService:Create/Play（_Animation 用的）。
+-- 只測讀的話，identity 8 會通過、但 tween 仍失敗 → 必須把 tween 一起測，校準才會跳過 8 找到對的 identity。
+local function _ProbeOK() : boolean
+	return (pcall(function()
+		local _ = _ProbeFrame.AbsolutePosition;                                      -- 讀
+		_ProbeFrame.BackgroundTransparency = _ProbeFrame.BackgroundTransparency;      -- 寫
+		local tw = TweenService:Create(_ProbeFrame, TweenInfo.new(0.05), { BackgroundTransparency = 1 }); -- tween
+		tw:Play();
+		tw:Cancel();
+	end)) == true;
+end;
+
+local function _CurrentIdentity() : number?
+	if not getthreadidentity then return nil; end;
+	local ok, id = pcall(getthreadidentity);
+	if ok and type(id) == 'number' then return id; end;
+	return nil;
+end;
+
+-- 切到能完整存取 CoreGui 的 identity；回傳原本 identity 供還原（nil = 沒動 identity）。
+-- 名稱沿用 _LowerIdentity，實際上是「自動找到正確 identity」。
+local function _LowerIdentity() : number?
+	if not (setthreadidentity and _ProbeFrame) then
+		if not _CALIB_LOGGED then
+			_CALIB_LOGGED = true;
+			warn("[Compkiller] 無法調整 identity：setthreadidentity present=" .. tostring(setthreadidentity ~= nil)
+				.. " / probeFrame present=" .. tostring(_ProbeFrame ~= nil));
+		end;
+		return nil;
+	end;
+
+	-- 已校準：直接套用快取值（省效能，不再 probe / 不建 tween）
+	if type(_UI_IDENTITY) == 'number' then
+		local prev = _CurrentIdentity();
+		pcall(setthreadidentity, _UI_IDENTITY);
+		return prev;
+	end;
+
+	-- 未校準：目前 thread 本來就能完整存取就不用動（多半是主執行緒）
+	if _ProbeOK() then return nil; end;
+
+	-- 有問題 → 掃描 8→0，找第一個「讀+寫+tween 全過」的 identity
+	local prev = _CurrentIdentity();
+	for _, id in ipairs(_CANDIDATES) do
+		pcall(setthreadidentity, id);
+		if _ProbeOK() then
+			_UI_IDENTITY = id;
+			if not _CALIB_LOGGED then
+				_CALIB_LOGGED = true;
+				warn("[Compkiller] CoreGui 存取 identity 已校準 = " .. tostring(id));
+			end;
+			return prev;
+		end;
+	end;
+
+	-- 全失敗：還原並放棄（讓原錯誤浮現，只警告一次）
+	if prev ~= nil then pcall(setthreadidentity, prev); end;
+	if not _CALIB_LOGGED then
+		_CALIB_LOGGED = true;
+		warn("[Compkiller] 找不到可完整存取 CoreGui 的 identity（讀/寫/tween 都試過 8→0）。setthreadidentity present=" .. tostring(setthreadidentity ~= nil));
+	end;
+	return nil;
+end;
+
+-- 還原 identity。
+local function _RestoreIdentity(prev : number?)
+	if setthreadidentity and prev ~= nil then
+		pcall(setthreadidentity, prev);
+	end;
+end;
+
+-- 把任一 callback 包成「進入時切到可存取 CoreGui 的 identity → 執行 → 還原」。
+-- 所有連線（RBXScriptSignal、自訂 __SIGNAL、全域 hook）都共用這個包裝。
+local function _WrapCallback(Callback)
+	return function(...)
+		local prev = _LowerIdentity();
+		local results = table.pack(pcall(Callback, ...));
+		_RestoreIdentity(prev);
+		if not results[1] then
+			task.spawn(error, results[2]);
+			return;
+		end;
+		return table.unpack(results, 2, results.n);
+	end;
+end;
+
+-- 把一個會碰 CoreGui 的 signal callback 包好再連線。
+local function _SafeConnect(Signal : RBXScriptSignal, Callback)
+	return Signal:Connect(_WrapCallback(Callback));
+end;
+
+-- GetPropertyChangedSignal 專用包裝：原本的 obj:GetPropertyChangedSignal('P'):Connect(cb) 已全部改寫成 _PropChanged(obj,'P',cb)。
+local function _PropChanged(Target : Instance, Property : string, Callback)
+	return _SafeConnect(Target:GetPropertyChangedSignal(Property), Callback);
+end;
+
+-- === 全域 signal connection 包裝 ===
+-- 核心執行器身分太高，引擎觸發的 callback 一讀 CoreGui 屬性就丟 "lacking capability"。
+-- 這裡一次性 hook __namecall，只攔截「本腳本自己」(checkcaller) 對 RBXScriptSignal 的 Connect，
+-- 把 callback 包成「進入時降身分→執行→還原」，其餘遊戲腳本的連線完全不碰。
+-- 有了它，之後所有互動 handler（拖曳 / 懸停 / 點擊…）都不必各自處理；上面的 _SafeConnect 仍保留，
+-- 當作執行器沒有 hook 能力時的後備。
+do
+	local wrapHook = newcclosure or function(f) return f; end; -- 沒有 newcclosure 就用原函式
+	local canHook = setthreadidentity and hookmetamethod and getnamecallmethod and checkcaller;
+	if canHook then
+		local ok, err = pcall(function()
+			local oldNamecall;
+			oldNamecall = hookmetamethod(game, "__namecall", wrapHook(function(self, ...)
+				-- 先用最便宜的 checkcaller 短路掉所有遊戲/引擎自己的 namecall，降到最低開銷
+				if checkcaller() then
+					local gotMethod, method = pcall(getnamecallmethod);
+					if gotMethod and typeof(self) == "RBXScriptSignal"
+						and (method == "Connect" or method == "connect" or method == "Once" or method == "ConnectParallel") then
+						local cb = (...);
+						if type(cb) == "function" then
+							return oldNamecall(self, _WrapCallback(cb));
+						end;
+					end;
+				end;
+				return oldNamecall(self, ...);
+			end));
+		end);
+		if ok then
+			warn("[Compkiller] 全域 __namecall hook 已安裝 ✓");
+		else
+			warn("[Compkiller] 全域 hook 安裝失敗，改靠各連線點自行包裝：" .. tostring(err));
+		end;
+	else
+		warn("[Compkiller] 無法安裝全域 hook（缺 primitive）：hookmetamethod=" .. tostring(hookmetamethod ~= nil)
+			.. " getnamecallmethod=" .. tostring(getnamecallmethod ~= nil)
+			.. " checkcaller=" .. tostring(checkcaller ~= nil)
+			.. " newcclosure=" .. tostring(newcclosure ~= nil)
+			.. " setthreadidentity=" .. tostring(setthreadidentity ~= nil)
+			.. "。改靠各連線點自行包裝。");
+	end;
+end;
 
 -- === 設備檢測 ===
 local _platform = UserInputService:GetPlatform()
@@ -1568,7 +1728,10 @@ function Compkiller:_IsMouseOverFrame(Frame : Frame) : boolean
 		return;
 	end;
 
+	-- 此函式幾乎都從 InputChanged 等引擎 callback 呼叫，高身分下讀不到 CoreGui 屬性，先降身分再讀
+	local _prevId = _LowerIdentity();
 	local AbsPos: Vector2, AbsSize: Vector2 = Frame.AbsolutePosition, Frame.AbsoluteSize;
+	_RestoreIdentity(_prevId);
 
 	if Mouse.X >= AbsPos.X and Mouse.X <= AbsPos.X + AbsSize.X and Mouse.Y >= AbsPos.Y and Mouse.Y <= AbsPos.Y + AbsSize.Y then
 		return true;
@@ -1581,9 +1744,12 @@ function Compkiller:_Rounding(num: number, numDecimalPlaces: number) : number
 end;
 
 function Compkiller:_Animation(Self: Instance , Info: TweenInfo , Property :{[K] : V})
+	-- 從各種 callback（含 TabHover 等自訂 signal，全域 hook 攔不到）呼叫，這裡自己降身分保護 tween
+	local _prevId = _LowerIdentity();
 	local Tween = TweenService:Create(Self , Info or TweenInfo.new(0.25) , Property);
 
 	Tween:Play();
+	_RestoreIdentity(_prevId);
 
 	return Tween;
 end;
@@ -1597,7 +1763,7 @@ function Compkiller:_Input(Frame : Frame , Callback : () -> ()) : TextButton
 	Button.TextTransparency = 1;
 
 	if Callback then
-		Button.MouseButton1Click:Connect(Callback);
+		_SafeConnect(Button.MouseButton1Click, Callback);
 	end;
 
 	return Button;
@@ -1617,7 +1783,7 @@ end;
 
 function Compkiller:_Blur(element : Frame , WindowRemote) : RBXScriptSignal
 	if Compkiller.SecureMode and not Compkiller.SecurityConfig.BlurEnabled then
-		return game.Changed:Connect(function() end);
+		return _SafeConnect(game.Changed, function() end);
 	end;
 
 	local Part = Instance.new('Part',Compkiller.ArcylicParent);
@@ -1725,8 +1891,8 @@ function Compkiller:_Blur(element : Frame , WindowRemote) : RBXScriptSignal
 		end;
 	end;
 
-	local rbxsignal = CurrentCamera:GetPropertyChangedSignal('CFrame'):Connect(UpdateFunction)
-	local loopThread = UserInputService.InputChanged:Connect(function(Input)
+	local rbxsignal = _PropChanged(CurrentCamera, 'CFrame', UpdateFunction)
+	local loopThread = _SafeConnect(UserInputService.InputChanged, function(Input)
 		if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.MouseMovement or Input.UserInputType == Enum.UserInputType.Touch then
 			pcall(UpdateFunction);
 		end;
@@ -1746,7 +1912,7 @@ function Compkiller:_Blur(element : Frame , WindowRemote) : RBXScriptSignal
 		DepthOfField:Destroy();
 	end;
 
-	element.Destroying:Connect(disconnect);
+	_SafeConnect(element.Destroying, disconnect);
 
 	return rbxsignal;
 end;
@@ -1770,11 +1936,13 @@ function Compkiller:_AddDragBlacklist(Frame: Frame, Condition)
 		end;
 	end;
 
-	Frame.InputBegan:Connect(function(input)
+	_SafeConnect(Frame.InputBegan, function(input)
 		-- 手機觸控時 Mouse.X/Y 尚未更新，改用 input.Position 做邊界判斷
 		local pos = input.Position
+		local _prevId = _LowerIdentity()
 		local AbsPos = Frame.AbsolutePosition
 		local AbsSize = Frame.AbsoluteSize
+		_RestoreIdentity(_prevId)
 		if pos.X >= AbsPos.X and pos.X <= AbsPos.X + AbsSize.X and pos.Y >= AbsPos.Y and pos.Y <= AbsPos.Y + AbsSize.Y then
 			-- 若有條件函數，只在條件成立時才加入黑名單
 			if not Condition or Condition() then
@@ -1783,11 +1951,11 @@ function Compkiller:_AddDragBlacklist(Frame: Frame, Condition)
 		end;
 	end);
 
-	Frame.InputEnded:Connect(function(input)
+	_SafeConnect(Frame.InputEnded, function(input)
 		SET_BLACKLIST(false);
 	end);
 
-	UserInputService.InputChanged:Connect(function()
+	_SafeConnect(UserInputService.InputChanged, function()
 		if not Compkiller:_IsMouseOverFrame(Frame) then
 			SET_BLACKLIST(false);
 		end
@@ -1824,9 +1992,12 @@ function Compkiller.__SIGNAL(default)
 	};
 
 	function Binds:Connect(event)
-		event(Bindable:GetAttribute("Value"));
+		-- 自訂 signal 的 callback 也要在可存取 CoreGui 的 identity 下跑（全域 hook 不一定攔得到）
+		local wrapped = _WrapCallback(event);
 
-		local signal = Bindable.Event:Connect(event);
+		wrapped(Bindable:GetAttribute("Value"));
+
+		local signal = Bindable.Event:Connect(wrapped);
 
 		table.insert(Binds.__signals,signal);
 
@@ -1851,9 +2022,9 @@ function Compkiller.__SIGNAL(default)
 end;
 
 function Compkiller:_Hover(Frame: Frame , OnHover: () -> any?, Release: () -> any?)
-	Frame.MouseEnter:Connect(OnHover);
+	_SafeConnect(Frame.MouseEnter, OnHover);
 
-	Frame.MouseLeave:Connect(Release);
+	_SafeConnect(Frame.MouseLeave, Release);
 end;
 
 function Compkiller.__CONFIG(config , default)
@@ -1890,12 +2061,12 @@ function Compkiller:Drag(InputFrame: Frame, MoveFrame: Frame, Speed : number)
 		});
 	end;
 
-	InputFrame.InputBegan:Connect(function(input)
+	_SafeConnect(InputFrame.InputBegan, function(input)
 		if (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) and #Compkiller.DragBlacklist <= 0 then 
 			dragToggle = true
 			dragStart = input.Position
 			startPos = MoveFrame.Position
-			input.Changed:Connect(function()
+			_SafeConnect(input.Changed, function()
 				if input.UserInputState == Enum.UserInputState.End then
 					dragToggle = false;
 					Compkiller.IS_DRAG_MOVE = false;
@@ -1910,7 +2081,7 @@ function Compkiller:Drag(InputFrame: Frame, MoveFrame: Frame, Speed : number)
 		Compkiller.IaDrag = dragToggle;
 	end)
 
-	UserInputService.InputChanged:Connect(function(input)
+	_SafeConnect(UserInputService.InputChanged, function(input)
 		if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch and #Compkiller.DragBlacklist <= 0 then
 			if dragToggle then
 				Compkiller.IS_DRAG_MOVE = true;
@@ -3201,7 +3372,7 @@ function Compkiller:_AddColorPickerPanel(Button: ImageButton , Callback: (Color:
 		end;
 	end;
 
-	Button.MouseButton1Click:Connect(function()
+	_SafeConnect(Button.MouseButton1Click, function()
 		ToggleUI(true);
 	end)
 
@@ -3244,7 +3415,7 @@ function Compkiller:_AddColorPickerPanel(Button: ImageButton , Callback: (Color:
 
 	local SPAWN_THREAD;
 
-	ColorPickerWindow.InputBegan:Connect(function(Input)
+	_SafeConnect(ColorPickerWindow.InputBegan, function(Input)
 		if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
 			Args.IsHold = true;
 
@@ -3265,7 +3436,7 @@ function Compkiller:_AddColorPickerPanel(Button: ImageButton , Callback: (Color:
 		end;
 	end)
 
-	ColorPickerWindow.InputEnded:Connect(function(Input)
+	_SafeConnect(ColorPickerWindow.InputEnded, function(Input)
 		if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
 			Args.IsHold = false;
 
@@ -3276,7 +3447,7 @@ function Compkiller:_AddColorPickerPanel(Button: ImageButton , Callback: (Color:
 		end;
 	end)
 
-	UserInputService.InputBegan:Connect(function(Input)
+	_SafeConnect(UserInputService.InputBegan, function(Input)
 		if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
 			if not Compkiller:_IsMouseOverFrame(ColorPickerWindow) then
 				ToggleUI(false);
@@ -3284,7 +3455,7 @@ function Compkiller:_AddColorPickerPanel(Button: ImageButton , Callback: (Color:
 		end;
 	end)
 
-	ColorRedGreenBlue.InputBegan:Connect(function(Input)
+	_SafeConnect(ColorRedGreenBlue.InputBegan, function(Input)
 		if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
 			Args.IsHold = true;
 
@@ -3301,7 +3472,7 @@ function Compkiller:_AddColorPickerPanel(Button: ImageButton , Callback: (Color:
 		end;
 	end);
 
-	ColorOpc.InputBegan:Connect(function(Input)
+	_SafeConnect(ColorOpc.InputBegan, function(Input)
 		if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
 			Args.IsHold = true;
 
@@ -3318,7 +3489,7 @@ function Compkiller:_AddColorPickerPanel(Button: ImageButton , Callback: (Color:
 		end;
 	end);
 
-	ColorPickBox.InputBegan:Connect(function(Input)
+	_SafeConnect(ColorPickBox.InputBegan, function(Input)
 		if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
 			Args.IsHold = true;
 
@@ -3785,7 +3956,7 @@ function Compkiller:_KeybindHandler(Parent: Frame , ObjectType: string , Element
 		end;
 	end;
 
-	KeybindHandler:GetPropertyChangedSignal('Size'):Connect(refreshPF);
+	_PropChanged(KeybindHandler, 'Size', refreshPF);
 
 	task.delay(0.1,refreshPF);
 
@@ -3968,13 +4139,13 @@ function Compkiller:_KeybindHandler(Parent: Frame , ObjectType: string , Element
 		end;
 	end)
 
-	Parent.InputEnded:Connect(function(Input,Typing)
+	_SafeConnect(Parent.InputEnded, function(Input,Typing)
 		if Input.UserInputType == Enum.UserInputType.MouseButton2 and not Typing then
 			KB_Signal:Fire(true);
 		end;
 	end);
 
-	UserInputService.InputBegan:Connect(function(Input)
+	_SafeConnect(UserInputService.InputBegan, function(Input)
 		if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.MouseButton2 or Input.UserInputType == Enum.UserInputType.Touch then
 			if not Compkiller:_IsMouseOverFrame(Parent) and not Compkiller:_IsMouseOverFrame(KeybindHandler) then
 				KB_Signal:Fire(false);
@@ -3982,7 +4153,7 @@ function Compkiller:_KeybindHandler(Parent: Frame , ObjectType: string , Element
 		end;
 	end);
 
-	UserInputService.InputBegan:Connect(function(Input,Typing)
+	_SafeConnect(UserInputService.InputBegan, function(Input,Typing)
 		if Input.KeyCode.Name == APIRef.Keybind or Input.KeyCode == APIRef.Keybind or (Input.UserInputType == Enum.UserInputType.MouseButton1 and APIRef.Keybind == "MouseLeft") or (Input.UserInputType == Enum.UserInputType.MouseButton2 and APIRef.Keybind == "MouseRight") then
 
 			if APIRef.Mode == 2 or APIRef.Mode == 4 then
@@ -3997,7 +4168,7 @@ function Compkiller:_KeybindHandler(Parent: Frame , ObjectType: string , Element
 		end;
 	end);
 
-	UserInputService.InputEnded:Connect(function(Input,Typing)
+	_SafeConnect(UserInputService.InputEnded, function(Input,Typing)
 		if Input.KeyCode.Name == APIRef.Keybind or Input.KeyCode == APIRef.Keybind or (Input.UserInputType == Enum.UserInputType.MouseButton1 and APIRef.Keybind == "MouseLeft") or (Input.UserInputType == Enum.UserInputType.MouseButton2 and APIRef.Keybind == "MouseRight") then
 
 			if APIRef.Mode == 2 then
@@ -4012,7 +4183,7 @@ function Compkiller:_KeybindHandler(Parent: Frame , ObjectType: string , Element
 end;
 
 function Compkiller:_AddPropertyEvent(Target: Frame , Callback: (boolean) -> any)
-	Target:GetPropertyChangedSignal('BackgroundTransparency'):Connect(function()
+	_PropChanged(Target, 'BackgroundTransparency', function()
 		Callback(Target.BackgroundTransparency <= 0.9)
 	end)
 end;
@@ -4112,7 +4283,7 @@ function Compkiller:_LoadOption(Value , TabSignal)
 			Helper.Text.TextSize = Config.TextSize;
 		end;
 
-		Helper.UIStroke:GetPropertyChangedSignal('Transparency'):Connect(function()
+		_PropChanged(Helper.UIStroke, 'Transparency', function()
 			if Helper.UIStroke.Transparency > 0.9 then
 				Helper.Text.Visible = false;
 			else
@@ -4278,7 +4449,7 @@ function Compkiller:_LoadOption(Value , TabSignal)
 			end);
 		end;
 
-		Toggle.Input.MouseButton1Click:Connect(function()
+		_SafeConnect(Toggle.Input.MouseButton1Click, function()
 			Config.Default = not Config.Default;
 
 			Toggle.ChangeValue(Config.Default);
@@ -4442,11 +4613,11 @@ function Compkiller:_LoadOption(Value , TabSignal)
 
 		ToggleUI(false);
 
-		Element.MouseButton1Click:Connect(function()
+		_SafeConnect(Element.MouseButton1Click, function()
 			ToggleUI(true);
 		end);
 
-		UserInputService.InputBegan:Connect(function(Input)
+		_SafeConnect(UserInputService.InputBegan, function(Input)
 			if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
 				if Toggl and not Compkiller:_IsMouseOverFrame(ExtractElement) and not Compkiller:_IsMouseOverFrame(Element) then
 					ToggleUI(false);
@@ -4531,7 +4702,7 @@ function Compkiller:_LoadDropdown(BaseParent: TextButton , Callback: () -> any)
 	UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
 	UIListLayout.Padding = UDim.new(0, 10)
 
-	UIListLayout:GetPropertyChangedSignal('AbsoluteContentSize'):Connect(function()
+	_PropChanged(UIListLayout, 'AbsoluteContentSize', function()
 		ScrollingFrame.CanvasSize = UDim2.fromOffset(UIListLayout.AbsoluteContentSize.X,UIListLayout.AbsoluteContentSize.Y)
 	end);
 
@@ -4757,7 +4928,7 @@ function Compkiller:_LoadDropdown(BaseParent: TextButton , Callback: () -> any)
 		end;
 	end;
 
-	BaseParent.MouseButton1Click:Connect(function()
+	_SafeConnect(BaseParent.MouseButton1Click, function()
 		if SpamUpdate then
 			ClearDropdown();
 			UpdateDropdown();
@@ -4768,7 +4939,7 @@ function Compkiller:_LoadDropdown(BaseParent: TextButton , Callback: () -> any)
 		ToggleUI(not isCurrentlyOpen);
 	end);
 
-	UserInputService.InputBegan:Connect(function(Input)
+	_SafeConnect(UserInputService.InputBegan, function(Input)
 		if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
 			-- 點擊外部時關閉（排除下拉視窗和按鈕本身）
 			if not Compkiller:_IsMouseOverFrame(DropdownWindow) and not Compkiller:_IsMouseOverFrame(BaseParent) then
@@ -4864,7 +5035,7 @@ function Compkiller:_LoadElement(Parent: Frame , EnabledLine: boolean , Signal ,
 			end);
 		end;
 
-		Toggle.Input.MouseButton1Click:Connect(function()
+		_SafeConnect(Toggle.Input.MouseButton1Click, function()
 			Config.Default = not Config.Default;
 
 			Toggle.ChangeValue(Config.Default);
@@ -5662,7 +5833,7 @@ function Compkiller:_LoadElement(Parent: Frame , EnabledLine: boolean , Signal ,
 
 		do
 			-- 滑桿開始拖動
-			SliderBar.InputBegan:Connect(function(Input)
+			_SafeConnect(SliderBar.InputBegan, function(Input)
 				if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
 					IsHold = true
 					Update(Input)
@@ -5670,14 +5841,14 @@ function Compkiller:_LoadElement(Parent: Frame , EnabledLine: boolean , Signal ,
 			end)
 
 			-- 全局監聽放開事件，確保任何位置放開都會停止拖動
-			UserInputService.InputEnded:Connect(function(Input)
+			_SafeConnect(UserInputService.InputEnded, function(Input)
 				if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
 					IsHold = false
 				end
 			end)
 
 			-- 拖動時持續追蹤，不再檢查是否在滑桿範圍內
-			UserInputService.InputChanged:Connect(function(Input)
+			_SafeConnect(UserInputService.InputChanged, function(Input)
 				if IsHold then
 					if Input.UserInputType == Enum.UserInputType.MouseMovement or Input.UserInputType == Enum.UserInputType.Touch then
 						Update(Input)
@@ -6066,7 +6237,7 @@ function Compkiller:_LoadElement(Parent: Frame , EnabledLine: boolean , Signal ,
 		UpdateScale();
 
 		-- 當容器大小改變時重新計算高度
-		Paragraph:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+		_PropChanged(Paragraph, "AbsoluteSize", function()
 			UpdateScale();
 		end);
 
@@ -6276,9 +6447,9 @@ function Compkiller:_LoadElement(Parent: Frame , EnabledLine: boolean , Signal ,
 
 		Update();
 
-		TextBox_2:GetPropertyChangedSignal('Text'):Connect(Update);
+		_PropChanged(TextBox_2, 'Text', Update);
 
-		TextBox_2:GetPropertyChangedSignal('Text'):Connect(function()
+		_PropChanged(TextBox_2, 'Text', function()
 			local value = parse(TextBox_2.Text);
 
 			if value then
@@ -6558,7 +6729,7 @@ function Compkiller:_LoadElement(Parent: Frame , EnabledLine: boolean , Signal ,
 		end;
 
 		-- 清除按鈕點擊事件
-		ClearButton.MouseButton1Click:Connect(function()
+		_SafeConnect(ClearButton.MouseButton1Click, function()
 			InputBox.Text = "";
 			Config.Default = "";
 			task.spawn(Config.Callback, "");
@@ -6566,7 +6737,7 @@ function Compkiller:_LoadElement(Parent: Frame , EnabledLine: boolean , Signal ,
 		end);
 
 		-- 文字變更事件
-		InputBox:GetPropertyChangedSignal('Text'):Connect(function()
+		_PropChanged(InputBox, 'Text', function()
 			local text = InputBox.Text;
 
 			-- 最大長度限制
@@ -6936,19 +7107,19 @@ function Compkiller:_LoadElement(Parent: Frame , EnabledLine: boolean , Signal ,
 		end;
 
 		-- 減少按鈕點擊
-		MinusButton.MouseButton1Click:Connect(function()
+		_SafeConnect(MinusButton.MouseButton1Click, function()
 			local current = tonumber(Config.Default) or 0;
 			ApplyValue(current - Config.Step);
 		end);
 
 		-- 增加按鈕點擊
-		PlusButton.MouseButton1Click:Connect(function()
+		_SafeConnect(PlusButton.MouseButton1Click, function()
 			local current = tonumber(Config.Default) or 0;
 			ApplyValue(current + Config.Step);
 		end);
 
 		-- 文字變更事件（數字驗證）
-		InputBox.FocusLost:Connect(function()
+		_SafeConnect(InputBox.FocusLost, function()
 			local text = InputBox.Text;
 			local cleaned = string.gsub(text, '[^0-9%.%-]', '');
 			local num = tonumber(cleaned);
@@ -7638,7 +7809,7 @@ function Compkiller.new(Config : Window)
 
 	Compkiller:_DrawKeybinds(CompKiller);
 
-	UIListLayout:GetPropertyChangedSignal('AbsoluteContentSize'):Connect(function()
+	_PropChanged(UIListLayout, 'AbsoluteContentSize', function()
 		TabButtonScrollingFrame.CanvasSize = UDim2.fromOffset(0,UIListLayout.AbsoluteContentSize.Y)
 	end);
 
@@ -7671,7 +7842,7 @@ function Compkiller.new(Config : Window)
 	MainFrame.Size = Compkiller.Scale.Window
 	MainFrame.ZIndex = 4
 
-	MainFrame:GetPropertyChangedSignal('BackgroundTransparency'):Connect(function()
+	_PropChanged(MainFrame, 'BackgroundTransparency', function()
 		if MainFrame.BackgroundTransparency > 0.9 then
 			MainFrame.Visible = false;
 		else
@@ -7830,13 +8001,13 @@ function Compkiller.new(Config : Window)
 		UICorner.CornerRadius = UDim.new(0, 4)
 		UICorner.Parent = Highlight
 
-		Userinfo.MouseEnter:Connect(function()
+		_SafeConnect(Userinfo.MouseEnter, function()
 			Compkiller:_Animation(Highlight,TweenInfo.new(0.2),{
 				BackgroundTransparency = 0.925
 			});
 		end);
 
-		Userinfo.MouseLeave:Connect(function()
+		_SafeConnect(Userinfo.MouseLeave, function()
 			Compkiller:_Animation(Highlight,TweenInfo.new(0.2),{
 				BackgroundTransparency = 1
 			});
@@ -8154,13 +8325,13 @@ function Compkiller.new(Config : Window)
 
 			Compkiller:Drag(UserSettings , UserSettings, 0.15);
 
-			UIListLayout:GetPropertyChangedSignal('AbsoluteContentSize'):Connect(function()
+			_PropChanged(UIListLayout, 'AbsoluteContentSize', function()
 				Compkiller:_Animation(UserSettings,TweenInfo.new(0.2),{
 					Size = UDim2.new(0, 235, 0, UIListLayout.AbsoluteContentSize.Y + 50)
 				})
 			end);
 
-			UserSettings:GetPropertyChangedSignal('BackgroundTransparency'):Connect(function()
+			_PropChanged(UserSettings, 'BackgroundTransparency', function()
 				if UserSettings.BackgroundTransparency < 1 then
 					UserSettings.Visible = true;
 				else
@@ -8432,7 +8603,7 @@ function Compkiller.new(Config : Window)
 		UIListLayout.Padding = UDim.new(0, 10)
 
 		-- Functions --
-		Highlight:GetPropertyChangedSignal('BackgroundTransparency'):Connect(function()
+		_PropChanged(Highlight, 'BackgroundTransparency', function()
 			if Highlight.BackgroundTransparency <= 0.99 then
 				ContainerTab.Visible = true;
 			else
@@ -8763,7 +8934,7 @@ function Compkiller.new(Config : Window)
 			Scrolling.CanvasSize = UDim2.fromOffset(0,UilistLayout.AbsoluteContentSize.Y + 5)
 		end;
 
-		UIListLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(upd);
+		_PropChanged(UIListLayout, "AbsoluteContentSize", upd);
 
 		return task.defer(function()
 			while true do task.wait(2) -- 優化性能：從 1s 改為 2s
@@ -9201,7 +9372,7 @@ function Compkiller.new(Config : Window)
 
 		local Tween = TweenInfo.new(0.35,Enum.EasingStyle.Quint);
 
-		Highlight:GetPropertyChangedSignal('BackgroundTransparency'):Connect(function()
+		_PropChanged(Highlight, 'BackgroundTransparency', function()
 			if Highlight.BackgroundTransparency <= 0.99 then
 				TabConfig.Visible = true;
 			else
@@ -9875,7 +10046,7 @@ function Compkiller.new(Config : Window)
 				task.spawn(ConfigButton.OnSave);
 			end);
 
-			DelButton.MouseButton1Click:Connect(function()
+			_SafeConnect(DelButton.MouseButton1Click, function()
 				task.spawn(ConfigButton.OnDelete);
 			end)
 
@@ -10033,7 +10204,7 @@ function Compkiller.new(Config : Window)
 			--Left.AutomaticCanvasSize = Enum.AutomaticSize.Y;
 			Left.CanvasSize = UDim2.new(0, 0, 0, 0)
 
-			UIListLayout:GetPropertyChangedSignal('AbsoluteContentSize'):Connect(function()
+			_PropChanged(UIListLayout, 'AbsoluteContentSize', function()
 				Left.CanvasSize = UDim2.fromOffset(0,UIListLayout.AbsoluteContentSize.Y)
 			end)
 
@@ -10065,7 +10236,7 @@ function Compkiller.new(Config : Window)
 			Upvalue.LeftLayout = UIListLayout;
 			Upvalue.RightLayout = UIListLayout_2;
 
-			UIListLayout_2:GetPropertyChangedSignal('AbsoluteContentSize'):Connect(function()
+			_PropChanged(UIListLayout_2, 'AbsoluteContentSize', function()
 				Right.CanvasSize = UDim2.fromOffset(0,UIListLayout_2.AbsoluteContentSize.Y)
 			end)
 
@@ -10086,7 +10257,7 @@ function Compkiller.new(Config : Window)
 
 			local Tween = TweenInfo.new(0.35,Enum.EasingStyle.Quint);
 
-			Internal.Highlight:GetPropertyChangedSignal('BackgroundTransparency'):Connect(function()
+			_PropChanged(Internal.Highlight, 'BackgroundTransparency', function()
 				if Internal.Highlight.BackgroundTransparency <= 0.99 then
 					TabContent.Visible = true;
 				else
@@ -10233,7 +10404,7 @@ function Compkiller.new(Config : Window)
 			Left.CanvasSize = UDim2.new(0, 0, 0, 0)
 
 
-			UIListLayout:GetPropertyChangedSignal('AbsoluteContentSize'):Connect(function()
+			_PropChanged(UIListLayout, 'AbsoluteContentSize', function()
 				Left.CanvasSize = UDim2.fromOffset(0,UIListLayout.AbsoluteContentSize.Y)
 			end);
 
@@ -10265,7 +10436,7 @@ function Compkiller.new(Config : Window)
 			Upvalue.LeftLayout = UIListLayout;
 			Upvalue.RightLayout = UIListLayout_2;
 
-			UIListLayout_2:GetPropertyChangedSignal('AbsoluteContentSize'):Connect(function()
+			_PropChanged(UIListLayout_2, 'AbsoluteContentSize', function()
 				Right.CanvasSize = UDim2.fromOffset(0,UIListLayout_2.AbsoluteContentSize.Y)
 			end)
 
@@ -10292,7 +10463,7 @@ function Compkiller.new(Config : Window)
 
 			local Tween = TweenInfo.new(0.35,Enum.EasingStyle.Quint);
 
-			Highlight:GetPropertyChangedSignal('BackgroundTransparency'):Connect(function()
+			_PropChanged(Highlight, 'BackgroundTransparency', function()
 				if Highlight.BackgroundTransparency <= 0.99 then
 					TabContent.Visible = true;
 				else
@@ -10718,13 +10889,13 @@ function Compkiller.new(Config : Window)
 				refresh();
 			end;
 
-			Section.ChildAdded:Connect(function()
+			_SafeConnect(Section.ChildAdded, function()
 				task.defer(refreshScale) -- 使用 task.defer 替代 task.wait
 			end)
 
 			Section:SetAttribute('HEIGHTSCALE',UIListLayout.AbsoluteContentSize.Y);
 
-			UIListLayout:GetPropertyChangedSignal('AbsoluteContentSize'):Connect(function()
+			_PropChanged(UIListLayout, 'AbsoluteContentSize', function()
 				Section:SetAttribute('HEIGHTSCALE',math.max(UIListLayout.AbsoluteContentSize.Y , Section:GetAttribute('HEIGHTSCALE')));
 
 				refresh()
@@ -10780,13 +10951,13 @@ function Compkiller.new(Config : Window)
 					refreshScale();
 				end);
 
-				Header.MouseEnter:Connect(function()
+				_SafeConnect(Header.MouseEnter, function()
 					Compkiller:_Animation(SectionText,TweenInfo.new(0.2),{
 						TextTransparency = 0.25
 					})
 				end)	
 
-				Header.MouseLeave:Connect(function()
+				_SafeConnect(Header.MouseLeave, function()
 					Compkiller:_Animation(SectionText,TweenInfo.new(0.2),{
 						TextTransparency = 0.500
 					})
@@ -11017,7 +11188,7 @@ function Compkiller.new(Config : Window)
 
 			Compkiller:_Blur(BackFrame,Signal);
 
-			UIListLayout:GetPropertyChangedSignal('AbsoluteContentSize'):Connect(function()
+			_PropChanged(UIListLayout, 'AbsoluteContentSize', function()
 				Compkiller:_Animation(Watermark,TweenInfo.new(0.4),{
 					Size = UDim2.new(0, UIListLayout.AbsoluteContentSize.X + 8, 0, 23)
 				});
@@ -11170,7 +11341,7 @@ function Compkiller.new(Config : Window)
 			end
 		end));
 
-		UserInputService.InputBegan:Connect(function(Input,Typing)
+		_SafeConnect(UserInputService.InputBegan, function(Input,Typing)
 			if not Typing and (Input.KeyCode == Config.Keybind or Input.KeyCode.Name == Config.Keybind) then
 				WindowArgs:_ToggleUI()
 			end;
