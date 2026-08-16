@@ -410,7 +410,7 @@ local CurrentCamera: Camera? = cloneref(workspace.CurrentCamera);
 local getthreadidentity = getthreadidentity or get_thread_identity or getidentity or getthreadcontext or (syn and syn.get_thread_identity);
 local setthreadidentity = setthreadidentity or set_thread_identity or setidentity or setthreadcontext or (syn and syn.set_thread_identity);
 
--- 跨 loadstring 共用少量模組級狀態，避免重載時重複建立 probe 與堆疊 __namecall hook。
+-- 跨 loadstring 共用少量模組級狀態，避免重載時重複建立 probe 並保留校準結果。
 local _SharedEnvironment = (getgenv and getgenv()) or _G;
 local _SharedRuntime: any = _SharedEnvironment.__COMPKILLER_RUNTIME;
 if type(_SharedRuntime) ~= "table" then
@@ -433,17 +433,40 @@ end;
 local _UI_IDENTITY = _SharedRuntime.UIIdentity; -- 上次成功的 identity（跨重載快取）
 local _CALIB_LOGGED = false;              -- 只 warn 一次
 local _CANDIDATES = { 8, 7, 6, 5, 4, 3, 2, 1, 0 };
+local _CALIBRATION_STATE = type(_UI_IDENTITY) == 'number' and "ready" or "idle";
+local _CALIBRATION_RETRY_AT = 0;
+local _CALIBRATION_RETRY_DELAY = 10;
+
+if _SharedRuntime.CalibrationState == "calibrating" then
+	_SharedRuntime.CalibrationState = "idle";
+end;
+
+local function _CacheIdentity(id: number)
+	_UI_IDENTITY = id;
+	_CALIBRATION_STATE = "ready";
+	_SharedRuntime.UIIdentity = id;
+	_SharedRuntime.CalibrationState = "ready";
+end;
 
 -- probe 要測「實際會用到的全部操作」：讀屬性 + 寫屬性 + TweenService:Create/Play（_Animation 用的）。
 -- 只測讀的話，identity 8 會通過、但 tween 仍失敗 → 必須把 tween 一起測，校準才會跳過 8 找到對的 identity。
 local function _ProbeOK() : boolean
-	return (pcall(function()
+	_SharedRuntime.IdentityProbeCount = (_SharedRuntime.IdentityProbeCount or 0) + 1;
+	local tw;
+	local Success = pcall(function()
 		local _ = _ProbeFrame.AbsolutePosition;                                      -- 讀
 		_ProbeFrame.BackgroundTransparency = _ProbeFrame.BackgroundTransparency;      -- 寫
-		local tw = TweenService:Create(_ProbeFrame, TweenInfo.new(0.05), { BackgroundTransparency = 1 }); -- tween
+		tw = TweenService:Create(_ProbeFrame, TweenInfo.new(0), { BackgroundTransparency = 1 }); -- tween
 		tw:Play();
 		tw:Cancel();
-	end)) == true;
+	end);
+	if tw then
+		pcall(function()
+			tw:Cancel();
+			tw:Destroy();
+		end);
+	end;
+	return Success;
 end;
 
 local function _CurrentIdentity() : number?
@@ -472,16 +495,30 @@ local function _LowerIdentity() : number?
 		return prev;
 	end;
 
-	-- 未校準：目前 thread 本來就能完整存取就不用動（多半是主執行緒）
-	if _ProbeOK() then return nil; end;
+	-- 校準失敗時進入冷卻，避免每個高頻事件都重新掃描並建立 probe Tween。
+	if _CALIBRATION_STATE == "calibrating"
+		or (_CALIBRATION_STATE == "failed" and tick() < _CALIBRATION_RETRY_AT) then
+		return nil;
+	end;
+
+	_CALIBRATION_STATE = "calibrating";
+	_SharedRuntime.CalibrationState = "calibrating";
+	_SharedRuntime.IdentityCalibrationAttempts = (_SharedRuntime.IdentityCalibrationAttempts or 0) + 1;
+
+	local prev = _CurrentIdentity();
+
+	-- 目前 thread 已可完整存取時，也必須快取 identity；舊版在此直接 return，
+	-- 導致每個 callback 永久重跑 _ProbeOK 並建立 Tween。
+	if type(prev) == 'number' and _ProbeOK() then
+		_CacheIdentity(prev);
+		return prev;
+	end;
 
 	-- 有問題 → 掃描 8→0，找第一個「讀+寫+tween 全過」的 identity
-	local prev = _CurrentIdentity();
 	for _, id in ipairs(_CANDIDATES) do
 		pcall(setthreadidentity, id);
 		if _ProbeOK() then
-			_UI_IDENTITY = id;
-			_SharedRuntime.UIIdentity = id;
+			_CacheIdentity(id);
 			if not _CALIB_LOGGED then
 				_CALIB_LOGGED = true;
 				warn("[Compkiller] CoreGui 存取 identity 已校準 = " .. tostring(id));
@@ -492,6 +529,10 @@ local function _LowerIdentity() : number?
 
 	-- 全失敗：還原並放棄（讓原錯誤浮現，只警告一次）
 	if prev ~= nil then pcall(setthreadidentity, prev); end;
+	_CALIBRATION_STATE = "failed";
+	_CALIBRATION_RETRY_AT = tick() + _CALIBRATION_RETRY_DELAY;
+	_SharedRuntime.CalibrationState = "failed";
+	_SharedRuntime.CalibrationRetryAt = _CALIBRATION_RETRY_AT;
 	if not _CALIB_LOGGED then
 		_CALIB_LOGGED = true;
 		warn("[Compkiller] 找不到可完整存取 CoreGui 的 identity（讀/寫/tween 都試過 8→0）。setthreadidentity present=" .. tostring(setthreadidentity ~= nil));
@@ -508,17 +549,31 @@ end;
 
 -- 把任一 callback 包成「進入時切到可存取 CoreGui 的 identity → 執行 → 還原」。
 -- 所有連線（RBXScriptSignal、自訂 __SIGNAL、全域 hook）都共用這個包裝。
+local _WrappedCallbacks = _SharedRuntime.WrappedCallbacks;
+if type(_WrappedCallbacks) ~= "table" then
+	_WrappedCallbacks = setmetatable({}, { __mode = "k" });
+	_SharedRuntime.WrappedCallbacks = _WrappedCallbacks;
+end;
+
 local function _WrapCallback(Callback)
-	return function(...)
+	if _WrappedCallbacks[Callback] then
+		return Callback;
+	end;
+
+	local Wrapped = function(...)
 		local prev = _LowerIdentity();
-		local results = table.pack(pcall(Callback, ...));
+		local Success, Result1, Result2, Result3, Result4, Result5, Result6 = pcall(Callback, ...);
 		_RestoreIdentity(prev);
-		if not results[1] then
-			task.spawn(error, results[2]);
+		if not Success then
+			task.spawn(error, Result1);
 			return;
 		end;
-		return table.unpack(results, 2, results.n);
+		return Result1, Result2, Result3, Result4, Result5, Result6;
 	end;
+
+	_WrappedCallbacks[Wrapped] = true;
+	_SharedRuntime.WrappedCallbacksCreated = (_SharedRuntime.WrappedCallbacksCreated or 0) + 1;
+	return Wrapped;
 end;
 
 -- 把一個會碰 CoreGui 的 signal callback 包好再連線。
@@ -531,50 +586,11 @@ local function _PropChanged(Target : Instance, Property : string, Callback)
 	return _SafeConnect(Target:GetPropertyChangedSignal(Property), Callback);
 end;
 
--- === 全域 signal connection 包裝 ===
--- 核心執行器身分太高，引擎觸發的 callback 一讀 CoreGui 屬性就丟 "lacking capability"。
--- 這裡一次性 hook __namecall，只攔截「本腳本自己」(checkcaller) 對 RBXScriptSignal 的 Connect，
--- 把 callback 包成「進入時降身分→執行→還原」，其餘遊戲腳本的連線完全不碰。
--- 有了它，之後所有互動 handler（拖曳 / 懸停 / 點擊…）都不必各自處理；上面的 _SafeConnect 仍保留，
--- 當作執行器沒有 hook 能力時的後備。
-do
-	local wrapHook = newcclosure or function(f) return f; end; -- 沒有 newcclosure 就用原函式
-	local canHook = setthreadidentity and hookmetamethod and getnamecallmethod and checkcaller;
-	_SharedRuntime.WrapCallback = _WrapCallback;
-	if canHook and not _SharedRuntime.SignalHookInstalled then
-		local ok, err = pcall(function()
-			local oldNamecall;
-			oldNamecall = hookmetamethod(game, "__namecall", wrapHook(function(self, ...)
-				-- 先用最便宜的 checkcaller 短路掉所有遊戲/引擎自己的 namecall，降到最低開銷
-				if checkcaller() then
-					local gotMethod, method = pcall(getnamecallmethod);
-					if gotMethod and typeof(self) == "RBXScriptSignal"
-						and (method == "Connect" or method == "connect" or method == "Once" or method == "ConnectParallel") then
-						local cb = (...);
-						if type(cb) == "function" then
-							local CurrentWrapper = _SharedRuntime.WrapCallback;
-							return oldNamecall(self, CurrentWrapper and CurrentWrapper(cb) or cb);
-						end;
-					end;
-				end;
-				return oldNamecall(self, ...);
-			end));
-		end);
-		if ok then
-			_SharedRuntime.SignalHookInstalled = true;
-			warn("[Compkiller] 全域 __namecall hook 已安裝 ✓");
-		else
-			warn("[Compkiller] 全域 hook 安裝失敗，改靠各連線點自行包裝：" .. tostring(err));
-		end;
-	elseif not canHook then
-		warn("[Compkiller] 無法安裝全域 hook（缺 primitive）：hookmetamethod=" .. tostring(hookmetamethod ~= nil)
-			.. " getnamecallmethod=" .. tostring(getnamecallmethod ~= nil)
-			.. " checkcaller=" .. tostring(checkcaller ~= nil)
-			.. " newcclosure=" .. tostring(newcclosure ~= nil)
-			.. " setthreadidentity=" .. tostring(setthreadidentity ~= nil)
-			.. "。改靠各連線點自行包裝。");
-	end;
-end;
+-- UI 庫所有原生 RBXScriptSignal 都由 _SafeConnect / _PropChanged 明確包裝。
+-- 不再 hook 全域 __namecall，避免把載入 UI 後由其他遊戲腳本建立的數千個 Connect
+-- 一併包成 UI callback。舊版 hook 無法安全還原，但它會動態讀取此欄位；清空後即退化為透明轉送。
+_SharedRuntime.WrapCallback = nil;
+_SharedRuntime.SignalHookEnabled = false;
 
 -- === 設備檢測 ===
 local _platform = UserInputService:GetPlatform()
@@ -650,6 +666,14 @@ Compkiller.IaDrag = false;
 Compkiller.LastDrag = tick();
 Compkiller.DragLocked = false; -- 控制UI是否固定（禁止移動）
 Compkiller.Flags = {};
+local _DragReleaseConnection = nil;
+
+local function _DisconnectDragRelease()
+	if _DragReleaseConnection then
+		_DragReleaseConnection:Disconnect();
+		_DragReleaseConnection = nil;
+	end;
+end;
 
 -- 從全域主題索引移除指定 UI 樹，避免已 Destroy 的 Instance 被強引用。
 function Compkiller:_RemoveThemeTree(Root: Instance)
@@ -1705,7 +1729,7 @@ function Compkiller:OptimizeMode(v)
 end;
 
 function Compkiller:GetRuntimeStats()
-	local Result = table.clone(Compkiller.RuntimeStats);
+	local Result: any = table.clone(Compkiller.RuntimeStats);
 	Result.Windows = #Compkiller.Windows;
 	Result.Flags = 0;
 	Result.WindowsNil = 0;
@@ -1713,6 +1737,17 @@ function Compkiller:GetRuntimeStats()
 	Result.TrackedConnections = 0;
 	Result.TrackedSignals = 0;
 	Result.TrackedTasks = 0;
+	Result.IdentityProbeCount = _SharedRuntime.IdentityProbeCount or 0;
+	Result.IdentityCalibrationAttempts = _SharedRuntime.IdentityCalibrationAttempts or 0;
+	Result.IdentityCalibrationState = _SharedRuntime.CalibrationState or "idle";
+	Result.CachedUIIdentity = _SharedRuntime.UIIdentity;
+	Result.GlobalSignalHookEnabled = _SharedRuntime.SignalHookEnabled == true;
+	Result.WrappedCallbacksCreated = _SharedRuntime.WrappedCallbacksCreated or 0;
+	Result.ActiveWrappedCallbacks = 0;
+
+	for _ in next, _WrappedCallbacks do
+		Result.ActiveWrappedCallbacks += 1;
+	end;
 
 	for _ in next, Compkiller.Flags do
 		Result.Flags += 1;
@@ -1742,7 +1777,6 @@ function Compkiller:GetRuntimeStats()
 end;
 
 -- 完整卸載目前模組建立的視窗與全域索引，供腳本重載前主動清理。
--- 共用 hook 本身只安裝一次，因此這裡只移除目前模組的 callback，不重複還原 hook。
 function Compkiller:Unload()
 	local PendingWindows = {};
 	local AddedWindows = {};
@@ -1794,6 +1828,7 @@ function Compkiller:Unload()
 	if _SharedRuntime.WrapCallback == _WrapCallback then
 		_SharedRuntime.WrapCallback = nil;
 	end;
+	_DisconnectDragRelease();
 
 	return true;
 end;
@@ -2072,9 +2107,6 @@ end;
 
 -- Condition: 可選函數，返回 true 才允許加入黑名單（用於「只有可捲動時才鎖定拖動」）
 function Compkiller:_AddDragBlacklist(Frame: Frame, Condition)
-	local IsAdded = false;
-	local BASE_TIME = 0.01;
-
 	local SET_BLACKLIST = function(value)
 		local index = table.find(Compkiller.DragBlacklist , Frame);
 
@@ -2108,11 +2140,17 @@ function Compkiller:_AddDragBlacklist(Frame: Frame, Condition)
 		SET_BLACKLIST(false);
 	end);
 
-	Compkiller:_TrackConnection(Frame, _SafeConnect(UserInputService.InputChanged, function()
-		if not Compkiller:_IsMouseOverFrame(Frame) then
-			SET_BLACKLIST(false);
-		end
-	end));
+	-- 所有元件共用一條釋放監聽；舊版每個元件各接一條 InputChanged，
+	-- 滑鼠每移動一次就會同時喚醒數百個 callback。
+	if not _DragReleaseConnection then
+		_DragReleaseConnection = _SafeConnect(UserInputService.InputEnded, function(Input)
+			if Input.UserInputType == Enum.UserInputType.MouseButton1
+				or Input.UserInputType == Enum.UserInputType.MouseButton2
+				or Input.UserInputType == Enum.UserInputType.Touch then
+				table.clear(Compkiller.DragBlacklist);
+			end;
+		end);
+	end;
 end;
 
 function Compkiller:_GetWindowFromElement(Element)
@@ -6149,6 +6187,21 @@ function Compkiller:_LoadElement(Parent: Frame , EnabledLine: boolean , Signal ,
 		end)	
 
 		local IsHold = false;
+		local DragChangedConnection = nil;
+		local DragEndedConnection = nil;
+		local SliderTween = nil;
+
+		local StopDragging = function()
+			IsHold = false;
+			if DragChangedConnection then
+				DragChangedConnection:Disconnect();
+				DragChangedConnection = nil;
+			end;
+			if DragEndedConnection then
+				DragEndedConnection:Disconnect();
+				DragEndedConnection = nil;
+			end;
+		end;
 
 		local Update = function(Input)
 			local SizeScale = math.clamp((((Input.Position.X) - SliderBar.AbsolutePosition.X) / SliderBar.AbsoluteSize.X), 0, 1);
@@ -6161,9 +6214,12 @@ function Compkiller:_LoadElement(Parent: Frame , EnabledLine: boolean , Signal ,
 
 			local Size = (Value - Config.Min) / (Config.Max - Config.Min);
 
-			TweenService:Create(SliderInput , TweenInfo.new(0.2),{
+			if SliderTween then
+				SliderTween:Cancel();
+			end;
+			SliderTween = Compkiller:_Animation(SliderInput , TweenInfo.new(0.2),{
 				Size = UDim2.new(math.clamp(Size,0.045,1), 0, 1, 0)
-			}):Play();
+			});
 
 			Config.Default = Value;
 
@@ -6176,26 +6232,32 @@ function Compkiller:_LoadElement(Parent: Frame , EnabledLine: boolean , Signal ,
 			-- 滑桿開始拖動
 			_SafeConnect(SliderBar.InputBegan, function(Input)
 				if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
+					StopDragging();
 					IsHold = true
 					Update(Input)
-				end
-			end)
 
-			-- 全局監聽放開事件，確保任何位置放開都會停止拖動
-			Compkiller:_TrackConnection(Slider, _SafeConnect(UserInputService.InputEnded, function(Input)
-				if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
-					IsHold = false
+					DragChangedConnection = _SafeConnect(UserInputService.InputChanged, function(ChangedInput)
+						if IsHold and (ChangedInput.UserInputType == Enum.UserInputType.MouseMovement
+							or ChangedInput.UserInputType == Enum.UserInputType.Touch) then
+							Update(ChangedInput);
+						end;
+					end);
+					DragEndedConnection = _SafeConnect(UserInputService.InputEnded, function(EndedInput)
+						if EndedInput.UserInputType == Enum.UserInputType.MouseButton1
+							or EndedInput.UserInputType == Enum.UserInputType.Touch then
+							StopDragging();
+						end;
+					end);
 				end
-			end))
+			end);
 
-			-- 拖動時持續追蹤，不再檢查是否在滑桿範圍內
-			Compkiller:_TrackConnection(Slider, _SafeConnect(UserInputService.InputChanged, function(Input)
-				if IsHold then
-					if Input.UserInputType == Enum.UserInputType.MouseMovement or Input.UserInputType == Enum.UserInputType.Touch then
-						Update(Input)
-					end
+			_SafeConnect(Slider.Destroying, function()
+				StopDragging();
+				if SliderTween then
+					SliderTween:Cancel();
+					SliderTween = nil;
 				end
-			end));
+			end);
 		end;
 
 		local Args = {};
@@ -11787,6 +11849,9 @@ function Compkiller.new(Config : Window)
 			table.remove(Compkiller.Windows, windowIndex);
 		end
 		Compkiller.WindowArgsByRoot[CompKiller] = nil;
+		if #Compkiller.Windows == 0 then
+			_DisconnectDragRelease();
+		end;
 
 		for Flag, WindowRoot in next, Compkiller.FlagOwners do
 			if WindowRoot == CompKiller then
