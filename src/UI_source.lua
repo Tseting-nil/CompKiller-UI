@@ -3,7 +3,7 @@
 	原始 Github:https://github.com/4lpaca-pin/CompKiller
 	修改版 Github: https://github.com/Tseting-nil/CompKiller-UI
 	具體參考:https://tseting-nil.github.io/CompKiller-UI/%E8%AA%AA%E6%98%8E%E6%9B%B8.html#load-lib
-	版本:2026/06/18
+	版本:2026/08/16
 --]]
 
 --找functuon
@@ -410,16 +410,27 @@ local CurrentCamera: Camera? = cloneref(workspace.CurrentCamera);
 local getthreadidentity = getthreadidentity or get_thread_identity or getidentity or getthreadcontext or (syn and syn.get_thread_identity);
 local setthreadidentity = setthreadidentity or set_thread_identity or setidentity or setthreadcontext or (syn and syn.set_thread_identity);
 
--- 隱藏 probe frame（CoreGui 子物件）：在 callback thread 裡測哪個 identity 讀得到屬性
-local _ProbeFrame;
-pcall(function()
-	_ProbeFrame = Instance.new('Frame');
-	_ProbeFrame.Name = string.sub(tostring({}), 7);
-	_ProbeFrame.Visible = false;
-	_ProbeFrame.Parent = CoreGui;
-end);
+-- 跨 loadstring 共用少量模組級狀態，避免重載時重複建立 probe 與堆疊 __namecall hook。
+local _SharedEnvironment = (getgenv and getgenv()) or _G;
+local _SharedRuntime: any = _SharedEnvironment.__COMPKILLER_RUNTIME;
+if type(_SharedRuntime) ~= "table" then
+	_SharedRuntime = {};
+	_SharedEnvironment.__COMPKILLER_RUNTIME = _SharedRuntime;
+end;
 
-local _UI_IDENTITY;                       -- 上次成功的 identity（快取）
+-- 隱藏 probe frame（CoreGui 子物件）：在 callback thread 裡測哪個 identity 讀得到屬性
+local _ProbeFrame = _SharedRuntime.ProbeFrame;
+if not _ProbeFrame or not _ProbeFrame.Parent then
+	pcall(function()
+		_ProbeFrame = Instance.new('Frame');
+		_ProbeFrame.Name = string.sub(tostring({}), 7);
+		_ProbeFrame.Visible = false;
+		_ProbeFrame.Parent = CoreGui;
+		_SharedRuntime.ProbeFrame = _ProbeFrame;
+	end);
+end;
+
+local _UI_IDENTITY = _SharedRuntime.UIIdentity; -- 上次成功的 identity（跨重載快取）
 local _CALIB_LOGGED = false;              -- 只 warn 一次
 local _CANDIDATES = { 8, 7, 6, 5, 4, 3, 2, 1, 0 };
 
@@ -470,6 +481,7 @@ local function _LowerIdentity() : number?
 		pcall(setthreadidentity, id);
 		if _ProbeOK() then
 			_UI_IDENTITY = id;
+			_SharedRuntime.UIIdentity = id;
 			if not _CALIB_LOGGED then
 				_CALIB_LOGGED = true;
 				warn("[Compkiller] CoreGui 存取 identity 已校準 = " .. tostring(id));
@@ -528,7 +540,8 @@ end;
 do
 	local wrapHook = newcclosure or function(f) return f; end; -- 沒有 newcclosure 就用原函式
 	local canHook = setthreadidentity and hookmetamethod and getnamecallmethod and checkcaller;
-	if canHook then
+	_SharedRuntime.WrapCallback = _WrapCallback;
+	if canHook and not _SharedRuntime.SignalHookInstalled then
 		local ok, err = pcall(function()
 			local oldNamecall;
 			oldNamecall = hookmetamethod(game, "__namecall", wrapHook(function(self, ...)
@@ -539,7 +552,8 @@ do
 						and (method == "Connect" or method == "connect" or method == "Once" or method == "ConnectParallel") then
 						local cb = (...);
 						if type(cb) == "function" then
-							return oldNamecall(self, _WrapCallback(cb));
+							local CurrentWrapper = _SharedRuntime.WrapCallback;
+							return oldNamecall(self, CurrentWrapper and CurrentWrapper(cb) or cb);
 						end;
 					end;
 				end;
@@ -547,11 +561,12 @@ do
 			end));
 		end);
 		if ok then
+			_SharedRuntime.SignalHookInstalled = true;
 			warn("[Compkiller] 全域 __namecall hook 已安裝 ✓");
 		else
 			warn("[Compkiller] 全域 hook 安裝失敗，改靠各連線點自行包裝：" .. tostring(err));
 		end;
-	else
+	elseif not canHook then
 		warn("[Compkiller] 無法安裝全域 hook（缺 primitive）：hookmetamethod=" .. tostring(hookmetamethod ~= nil)
 			.. " getnamecallmethod=" .. tostring(getnamecallmethod ~= nil)
 			.. " checkcaller=" .. tostring(checkcaller ~= nil)
@@ -588,6 +603,14 @@ local Compkiller = {
 	},
 	PerformanceMode = false,
 	WindowsNil = {},
+	WindowArgsByRoot = setmetatable({}, { __mode = "kv" }),
+	FlagOwners = {},
+	RuntimeStats = {
+		DropdownNoops = 0,
+		DropdownRebuilds = 0,
+		DropdownItemsCreated = 0,
+		DropdownItemsCleared = 0,
+	},
 	NilFolder = Instance.new('Folder'),
 	ArcylicParent = CurrentCamera,
 	ProtectGui = protect_gui or protectgui or (syn and syn.protect_gui) or function(s) return s; end,
@@ -627,6 +650,42 @@ Compkiller.IaDrag = false;
 Compkiller.LastDrag = tick();
 Compkiller.DragLocked = false; -- 控制UI是否固定（禁止移動）
 Compkiller.Flags = {};
+
+-- 從全域主題索引移除指定 UI 樹，避免已 Destroy 的 Instance 被強引用。
+function Compkiller:_RemoveThemeTree(Root: Instance)
+	if not Root then
+		return;
+	end;
+
+	for _, Registry in next, Compkiller.Elements do
+		for Index = #Registry, 1, -1 do
+			local Entry = Registry[Index];
+			local Element = Entry and Entry.Element;
+			local ShouldRemove = Element == Root;
+
+			if Element and not ShouldRemove then
+				local Success, IsDescendant = pcall(function()
+					return Element:IsDescendantOf(Root);
+				end);
+				ShouldRemove = Success and IsDescendant;
+			end;
+
+			if ShouldRemove then
+				table.remove(Registry, Index);
+			end;
+		end;
+	end;
+
+	for Index = #Compkiller.DragBlacklist, 1, -1 do
+		local Element = Compkiller.DragBlacklist[Index];
+		local Success, IsOwned = pcall(function()
+			return Element == Root or Element:IsDescendantOf(Root);
+		end);
+		if Success and IsOwned then
+			table.remove(Compkiller.DragBlacklist, Index);
+		end;
+	end;
+end;
 
 Compkiller.Lucide = {
 	['lucide-mouse-2'] = "rbxassetid://10088146939",
@@ -1645,6 +1704,100 @@ function Compkiller:OptimizeMode(v)
 	Compkiller.PerformanceMode = v;
 end;
 
+function Compkiller:GetRuntimeStats()
+	local Result = table.clone(Compkiller.RuntimeStats);
+	Result.Windows = #Compkiller.Windows;
+	Result.Flags = 0;
+	Result.WindowsNil = 0;
+	Result.ThemeReferences = 0;
+	Result.TrackedConnections = 0;
+	Result.TrackedSignals = 0;
+	Result.TrackedTasks = 0;
+
+	for _ in next, Compkiller.Flags do
+		Result.Flags += 1;
+	end;
+	for _ in next, Compkiller.WindowsNil do
+		Result.WindowsNil += 1;
+	end;
+	for _, Registry in next, Compkiller.Elements do
+		Result.ThemeReferences += #Registry;
+	end;
+	for _, WindowArgs in next, Compkiller.WindowArgsByRoot do
+		Result.TrackedConnections += WindowArgs.Connections and #WindowArgs.Connections or 0;
+		Result.TrackedSignals += WindowArgs.Signals and #WindowArgs.Signals or 0;
+		if WindowArgs.THREADS then
+			for _, Item in next, WindowArgs.THREADS do
+				if type(Item) == "thread" then
+					Result.TrackedTasks += 1;
+				end;
+			end;
+		end;
+		if WindowArgs.LOOP_THREAD then
+			Result.TrackedTasks += 1;
+		end;
+	end;
+
+	return Result;
+end;
+
+-- 完整卸載目前模組建立的視窗與全域索引，供腳本重載前主動清理。
+-- 共用 hook 本身只安裝一次，因此這裡只移除目前模組的 callback，不重複還原 hook。
+function Compkiller:Unload()
+	local PendingWindows = {};
+	local AddedWindows = {};
+
+	for _, WindowRoot in next, Compkiller.Windows do
+		if WindowRoot and not AddedWindows[WindowRoot] then
+			AddedWindows[WindowRoot] = true;
+			table.insert(PendingWindows, WindowRoot);
+		end;
+	end;
+	for WindowRoot in next, Compkiller.WindowArgsByRoot do
+		if WindowRoot and not AddedWindows[WindowRoot] then
+			AddedWindows[WindowRoot] = true;
+			table.insert(PendingWindows, WindowRoot);
+		end;
+	end;
+
+	for _, WindowRoot in next, PendingWindows do
+		local WindowArgs = Compkiller.WindowArgsByRoot[WindowRoot];
+		if WindowArgs and WindowArgs.Destroy then
+			WindowArgs:Destroy();
+		else
+			Compkiller:_RemoveThemeTree(WindowRoot);
+			WindowRoot:Destroy();
+		end;
+	end;
+
+	for Element in next, Compkiller.WindowsNil do
+		Compkiller:_RemoveThemeTree(Element);
+		Element:Destroy();
+		Compkiller.WindowsNil[Element] = nil;
+	end;
+
+	for _, Registry in next, Compkiller.Elements do
+		table.clear(Registry);
+	end;
+	table.clear(Compkiller.DragBlacklist);
+	table.clear(Compkiller.Flags);
+	table.clear(Compkiller.FlagOwners);
+	table.clear(Compkiller.Windows);
+	for WindowRoot in next, Compkiller.WindowArgsByRoot do
+		Compkiller.WindowArgsByRoot[WindowRoot] = nil;
+	end;
+
+	local KeybindCache = (Compkiller :: any).__KEYBINDS_CACHE;
+	if type(KeybindCache) == "table" then
+		table.clear(KeybindCache);
+	end;
+	if _SharedRuntime.WrapCallback == _WrapCallback then
+		_SharedRuntime.WrapCallback = nil;
+	end;
+
+	return true;
+end;
+
 function Compkiller:IsStudio()
 	return RunService:IsStudio()	
 end;
@@ -1955,11 +2108,11 @@ function Compkiller:_AddDragBlacklist(Frame: Frame, Condition)
 		SET_BLACKLIST(false);
 	end);
 
-	_SafeConnect(UserInputService.InputChanged, function()
+	Compkiller:_TrackConnection(Frame, _SafeConnect(UserInputService.InputChanged, function()
 		if not Compkiller:_IsMouseOverFrame(Frame) then
 			SET_BLACKLIST(false);
 		end
-	end);
+	end));
 end;
 
 function Compkiller:_GetWindowFromElement(Element)
@@ -1987,7 +2140,7 @@ function Compkiller.__SIGNAL(default)
 
 	Bindable:SetAttribute('Value',default);
 
-	local Binds = {
+	local Binds: any = {
 		__signals = {}	
 	};
 
@@ -2002,6 +2155,29 @@ function Compkiller.__SIGNAL(default)
 		table.insert(Binds.__signals,signal);
 
 		return signal;
+	end;
+
+	function Binds:Disconnect(signal)
+		local index = table.find(Binds.__signals, signal);
+		if index then
+			table.remove(Binds.__signals, index);
+		end;
+
+		if signal then
+			signal:Disconnect();
+		end;
+	end;
+
+	function Binds:Destroy()
+		if Binds.Destroyed then
+			return;
+		end;
+		Binds.Destroyed = true;
+		for _, signal in next, Binds.__signals do
+			signal:Disconnect();
+		end;
+		table.clear(Binds.__signals);
+		Bindable:Destroy();
 	end;
 
 	function Binds:Fire(value)
@@ -2081,7 +2257,7 @@ function Compkiller:Drag(InputFrame: Frame, MoveFrame: Frame, Speed : number)
 		Compkiller.IaDrag = dragToggle;
 	end)
 
-	_SafeConnect(UserInputService.InputChanged, function(input)
+	local InputChangedConnection = _SafeConnect(UserInputService.InputChanged, function(input)
 		if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch and #Compkiller.DragBlacklist <= 0 then
 			if dragToggle then
 				Compkiller.IS_DRAG_MOVE = true;
@@ -2098,6 +2274,32 @@ function Compkiller:Drag(InputFrame: Frame, MoveFrame: Frame, Speed : number)
 
 		Compkiller.IaDrag = dragToggle;
 	end);
+
+	return Compkiller:_TrackConnection(InputFrame, InputChangedConnection);
+end;
+
+function Compkiller:_TrackConnection(Element: Instance, Connection)
+	local WindowRoot = Compkiller:_GetWindowFromElement(Element);
+	local WindowArgs = WindowRoot and Compkiller.WindowArgsByRoot[WindowRoot];
+	if WindowArgs and WindowArgs.Connections then
+		table.insert(WindowArgs.Connections, Connection);
+	end;
+	return Connection;
+end;
+
+function Compkiller:_TrackSignal(Element: Instance, Signal)
+	local WindowRoot = Compkiller:_GetWindowFromElement(Element);
+	local WindowArgs = WindowRoot and Compkiller.WindowArgsByRoot[WindowRoot];
+	if WindowArgs and WindowArgs.Signals then
+		table.insert(WindowArgs.Signals, Signal);
+	end;
+	return Signal;
+end;
+
+function Compkiller:_RegisterFlag(Flag: string, Args, Element: Instance)
+	Compkiller.Flags[Flag] = Args;
+	Compkiller.FlagOwners[Flag] = Compkiller:_GetWindowFromElement(Element);
+	return Args;
 end;
 
 function Compkiller:_IsMobile()
@@ -3447,13 +3649,21 @@ function Compkiller:_AddColorPickerPanel(Button: ImageButton , Callback: (Color:
 		end;
 	end)
 
-	_SafeConnect(UserInputService.InputBegan, function(Input)
+	_SafeConnect(ColorPickerWindow.Destroying, function()
+		Args.IsHold = false;
+		if SPAWN_THREAD then
+			task.cancel(SPAWN_THREAD);
+			SPAWN_THREAD = nil;
+		end;
+	end)
+
+	Compkiller:_TrackConnection(ColorPickerWindow, _SafeConnect(UserInputService.InputBegan, function(Input)
 		if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
 			if not Compkiller:_IsMouseOverFrame(ColorPickerWindow) then
 				ToggleUI(false);
 			end;
 		end;
-	end)
+	end))
 
 	_SafeConnect(ColorRedGreenBlue.InputBegan, function(Input)
 		if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
@@ -3515,8 +3725,9 @@ function Compkiller:_AddColorPickerPanel(Button: ImageButton , Callback: (Color:
 end;
 
 function Compkiller:_DrawKeybinds(Window: ScreenGui)
-	if Compkiller.__KEYBINDS_CACHE then
-		return Compkiller.__KEYBINDS_CACHE;
+	Compkiller.__KEYBINDS_CACHE = Compkiller.__KEYBINDS_CACHE or setmetatable({}, { __mode = "kv" });
+	if Compkiller.__KEYBINDS_CACHE[Window] then
+		return Compkiller.__KEYBINDS_CACHE[Window];
 	end;
 
 	local Keybinds = Instance.new("Frame")
@@ -3651,19 +3862,125 @@ function Compkiller:_DrawKeybinds(Window: ScreenGui)
 	MovingFrame.Position = UDim2.new(1, 0, 0.5, 0)
 	MovingFrame.Size = UDim2.new(1, 30, 1, 0)
 
-	Compkiller:Drag(MovingFrame,Keybinds,0.1);
+	local DragConnection = Compkiller:Drag(MovingFrame,Keybinds,0.1);
 
-	local Ref = {
-		Root = Keybinds
+	local Ref: any = {
+		Root = Keybinds,
+		DragConnection = DragConnection,
+		Updaters = setmetatable({}, { __mode = "k" }),
+		InputBeganHandlers = setmetatable({}, { __mode = "k" }),
+		InputEndedHandlers = setmetatable({}, { __mode = "k" }),
+		Destroyed = false,
 	};
+
+	function Ref:AddUpdater(Owner: Instance, Callback)
+		Ref.Updaters[Owner] = Callback;
+	end;
+
+	function Ref:RemoveUpdater(Owner: Instance)
+		Ref.Updaters[Owner] = nil;
+	end;
+
+	function Ref:AddInputHandlers(Owner: Instance, Began, Ended)
+		Ref.InputBeganHandlers[Owner] = Began;
+		Ref.InputEndedHandlers[Owner] = Ended;
+	end;
+
+	function Ref:RemoveInputHandlers(Owner: Instance)
+		Ref.InputBeganHandlers[Owner] = nil;
+		Ref.InputEndedHandlers[Owner] = nil;
+	end;
+
+	Ref.InputBeganConnection = _SafeConnect(UserInputService.InputBegan, function(Input, Typing)
+		for Owner, Handler in next, Ref.InputBeganHandlers do
+			if Owner.Parent then
+				pcall(Handler, Input, Typing);
+			else
+				Ref.InputBeganHandlers[Owner] = nil;
+			end;
+		end;
+	end);
+
+	Ref.InputEndedConnection = _SafeConnect(UserInputService.InputEnded, function(Input, Typing)
+		for Owner, Handler in next, Ref.InputEndedHandlers do
+			if Owner.Parent then
+				pcall(Handler, Input, Typing);
+			else
+				Ref.InputEndedHandlers[Owner] = nil;
+			end;
+		end;
+	end);
+
+	function Ref:Destroy()
+		if Ref.Destroyed then
+			return;
+		end;
+		Ref.Destroyed = true;
+
+		if Ref.THREAD then
+			task.cancel(Ref.THREAD);
+			Ref.THREAD = nil;
+		end;
+		if Ref.DragConnection then
+			Ref.DragConnection:Disconnect();
+			Ref.DragConnection = nil;
+		end;
+		if Ref.InputBeganConnection then
+			Ref.InputBeganConnection:Disconnect();
+			Ref.InputBeganConnection = nil;
+		end;
+		if Ref.InputEndedConnection then
+			Ref.InputEndedConnection:Disconnect();
+			Ref.InputEndedConnection = nil;
+		end;
+		if Ref.WindowDestroyingConnection then
+			Ref.WindowDestroyingConnection:Disconnect();
+			Ref.WindowDestroyingConnection = nil;
+		end;
+
+		table.clear(Ref.Updaters);
+		table.clear(Ref.InputBeganHandlers);
+		table.clear(Ref.InputEndedHandlers);
+		Compkiller.__KEYBINDS_CACHE[Window] = nil;
+	end;
+
+	Ref.WindowDestroyingConnection = _SafeConnect(Window.Destroying, function()
+		Ref:Destroy();
+	end);
 
 	Ref.THREAD = task.spawn(function()
 		while true do task.wait(0.1) -- 優化性能：從每幀改為 100ms
+			for Owner, Updater in next, Ref.Updaters do
+				if Owner.Parent then
+					Updater();
+				else
+					Ref.Updaters[Owner] = nil;
+				end;
+			end;
+
+			local ContentHeight = UIListLayout.AbsoluteContentSize.Y;
+			local HasItems = ContentHeight > 1;
+			local LargF = 100;
+			for i,v in next , MainFrame:GetChildren() do
+				if v:GetAttribute('AvgScale') and v:GetAttribute('AvgScale') > LargF then
+					LargF = v:GetAttribute('AvgScale');
+				end;
+			end;
+
+			if Ref.LastContentHeight == ContentHeight and Ref.LastHasItems == HasItems
+				and Ref.LastWidth == LargF and Ref.LastPerformanceMode == Compkiller.PerformanceMode then
+				continue;
+			end;
+			Ref.LastContentHeight = ContentHeight;
+			Ref.LastHasItems = HasItems;
+			Ref.LastWidth = LargF;
+			Ref.LastPerformanceMode = Compkiller.PerformanceMode;
+
 			Compkiller:_Animation(MainFrame,TweenInfo.new(0.4),{
-				Size = UDim2.new(1, 30, 1, UIListLayout.AbsoluteContentSize.Y + 1)
+				Size = UDim2.new(1, 30, 1, ContentHeight + 1)
 			});
 
-			if UIListLayout.AbsoluteContentSize.Y > 1 then
+			if HasItems then
 				Compkiller:_Animation(IconFrame,TweenInfo.new(0.25),{
 					BackgroundTransparency = 0.3
 				})
@@ -3679,16 +3996,6 @@ function Compkiller:_DrawKeybinds(Window: ScreenGui)
 				Compkiller:_Animation(Icon,TweenInfo.new(0.25),{
 					ImageTransparency = 0
 				});
-
-				local LargF = 100;
-
-				for i,v in next , MainFrame:GetChildren() do
-					if v:GetAttribute('AvgScale') then
-						if v:GetAttribute('AvgScale') > LargF then
-							LargF = v:GetAttribute('AvgScale');
-						end;
-					end;
-				end;
 
 				Compkiller:_Animation(Keybinds,TweenInfo.new(0.25),{
 					BackgroundTransparency = 0.025,
@@ -3822,21 +4129,36 @@ function Compkiller:_DrawKeybinds(Window: ScreenGui)
 
 		UpdateScale();
 
-		local frame_ref = {};
+		local frame_ref = {
+			Root = Keyholder,
+			Visible = false,
+		};
 
 		function frame_ref:SetName(str: string)
-			Label.Text = str or Label.Text;
+			local NewText = str or Label.Text;
+			if Label.Text == NewText then
+				return;
+			end;
+			Label.Text = NewText;
 
 			UpdateScale();
 		end;
 
 		function frame_ref:SetType(str: string)
-			TypeLabel.Text = str or TypeLabel.Text;
+			local NewText = str or TypeLabel.Text;
+			if TypeLabel.Text == NewText then
+				return;
+			end;
+			TypeLabel.Text = NewText;
 
 			UpdateScale();
 		end;
 
 		function frame_ref:SetVisible(v)
+			if frame_ref.Visible == v then
+				return;
+			end;
+			frame_ref.Visible = v;
 			if v then
 				Compkiller:_Animation(Keyholder,TweenInfo.new(0.1),{
 					BackgroundTransparency = 0.600,
@@ -3882,10 +4204,15 @@ function Compkiller:_DrawKeybinds(Window: ScreenGui)
 			UpdateScale();
 		end;
 
+		function frame_ref:Destroy()
+			Compkiller:_RemoveThemeTree(Keyholder);
+			Keyholder:Destroy();
+		end;
+
 		return frame_ref;
 	end;
 
-	Compkiller.__KEYBINDS_CACHE = Ref;
+	Compkiller.__KEYBINDS_CACHE[Window] = Ref;
 
 	return Ref;
 end;
@@ -4123,21 +4450,14 @@ function Compkiller:_KeybindHandler(Parent: Frame , ObjectType: string , Element
 		APIRef.Update();
 	end;
 
-	APIRef.Thread = task.spawn(function()
-		while true do task.wait(0.1) -- 優化性能：從 10ms 改為 100ms
-			if APIRef.Mode ~= 1 then
-				if ElementAPI:GetValue() == APIRef.On then
-					KeybindFrame:SetVisible(true);
-				else
-					KeybindFrame:SetVisible(false);
-				end;
-
-				APIRef.Update();
-			else
-				KeybindFrame:SetVisible(false);
-			end;
+	KeybindInd:AddUpdater(Parent, function()
+		if APIRef.Mode ~= 1 then
+			KeybindFrame:SetVisible(ElementAPI:GetValue() == APIRef.On);
+			APIRef.Update();
+		else
+			KeybindFrame:SetVisible(false);
 		end;
-	end)
+	end);
 
 	_SafeConnect(Parent.InputEnded, function(Input,Typing)
 		if Input.UserInputType == Enum.UserInputType.MouseButton2 and not Typing then
@@ -4145,15 +4465,13 @@ function Compkiller:_KeybindHandler(Parent: Frame , ObjectType: string , Element
 		end;
 	end);
 
-	_SafeConnect(UserInputService.InputBegan, function(Input)
+	KeybindInd:AddInputHandlers(Parent, function(Input, Typing)
 		if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.MouseButton2 or Input.UserInputType == Enum.UserInputType.Touch then
 			if not Compkiller:_IsMouseOverFrame(Parent) and not Compkiller:_IsMouseOverFrame(KeybindHandler) then
 				KB_Signal:Fire(false);
 			end;
 		end;
-	end);
 
-	_SafeConnect(UserInputService.InputBegan, function(Input,Typing)
 		if Input.KeyCode.Name == APIRef.Keybind or Input.KeyCode == APIRef.Keybind or (Input.UserInputType == Enum.UserInputType.MouseButton1 and APIRef.Keybind == "MouseLeft") or (Input.UserInputType == Enum.UserInputType.MouseButton2 and APIRef.Keybind == "MouseRight") then
 
 			if APIRef.Mode == 2 or APIRef.Mode == 4 then
@@ -4166,9 +4484,7 @@ function Compkiller:_KeybindHandler(Parent: Frame , ObjectType: string , Element
 				end;
 			end;
 		end;
-	end);
-
-	_SafeConnect(UserInputService.InputEnded, function(Input,Typing)
+	end, function(Input, Typing)
 		if Input.KeyCode.Name == APIRef.Keybind or Input.KeyCode == APIRef.Keybind or (Input.UserInputType == Enum.UserInputType.MouseButton1 and APIRef.Keybind == "MouseLeft") or (Input.UserInputType == Enum.UserInputType.MouseButton2 and APIRef.Keybind == "MouseRight") then
 
 			if APIRef.Mode == 2 then
@@ -4177,6 +4493,15 @@ function Compkiller:_KeybindHandler(Parent: Frame , ObjectType: string , Element
 				ElementAPI:SetValue(APIRef.On);
 			end;
 		end;
+	end);
+
+	_SafeConnect(Parent.Destroying, function()
+		KeybindInd:RemoveUpdater(Parent);
+		KeybindInd:RemoveInputHandlers(Parent);
+		KeybindFrame:Destroy();
+		Compkiller:_RemoveThemeTree(KeybindHandler);
+		KeybindHandler:Destroy();
+		KB_Signal:Destroy();
 	end);
 
 	return APIRef;
@@ -4261,7 +4586,7 @@ function Compkiller:_LoadOption(Value , TabSignal)
 		end;
 
 		if Config.Flag then
-			Compkiller.Flags[Config.Flag] = Args;
+			Compkiller:_RegisterFlag(Config.Flag, Args, Value.Root);
 		end;
 
 		return Args;
@@ -4412,7 +4737,7 @@ function Compkiller:_LoadOption(Value , TabSignal)
 		end;
 
 		if Config.Flag then
-			Compkiller.Flags[Config.Flag] = Args;
+			Compkiller:_RegisterFlag(Config.Flag, Args, Value.Root);
 		end;
 
 		return Args;
@@ -4484,7 +4809,7 @@ function Compkiller:_LoadOption(Value , TabSignal)
 		end;
 
 		if Config.Flag then
-			Compkiller.Flags[Config.Flag] = Args;
+			Compkiller:_RegisterFlag(Config.Flag, Args, Value.Root);
 		end;
 
 		return Args;
@@ -4495,6 +4820,7 @@ function Compkiller:_LoadOption(Value , TabSignal)
 		local BaseZ_Index = math.random(1,15) * 100;
 
 		local Signal = Compkiller.__SIGNAL(false);
+		Compkiller:_TrackSignal(Element, Signal);
 
 		local ExtractElement = Instance.new("Frame")
 		local UIStroke = Instance.new("UIStroke")
@@ -4617,13 +4943,13 @@ function Compkiller:_LoadOption(Value , TabSignal)
 			ToggleUI(true);
 		end);
 
-		_SafeConnect(UserInputService.InputBegan, function(Input)
+		Compkiller:_TrackConnection(ExtractElement, _SafeConnect(UserInputService.InputBegan, function(Input)
 			if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
 				if Toggl and not Compkiller:_IsMouseOverFrame(ExtractElement) and not Compkiller:_IsMouseOverFrame(Element) then
 					ToggleUI(false);
 				end;
 			end
-		end)		
+		end))
 
 		return Compkiller:_LoadElement(Elements , true , Signal)
 	end;
@@ -4643,6 +4969,8 @@ function Compkiller:_LoadDropdown(BaseParent: TextButton , Callback: () -> any)
 	local UIListLayout = Instance.new("UIListLayout")
 	local ToggleDb = Compkiller.__SIGNAL(false);
 	local EventOut = Compkiller.__SIGNAL(0);
+	Compkiller:_TrackSignal(BaseParent, ToggleDb);
+	Compkiller:_TrackSignal(BaseParent, EventOut);
 
 	DropdownWindow.Name = Compkiller:_RandomString()
 	DropdownWindow.Parent = Window
@@ -4757,9 +5085,11 @@ function Compkiller:_LoadDropdown(BaseParent: TextButton , Callback: () -> any)
 
 	local SpamUpdate,_Delay = false , tick();
 	local __signals = {};
+	local Buttons = {};
 	local Default = nil;
 	local Values = nil;
 	local IsMulti = false;
+	local DataFrame = nil;
 
 	local DrawButton = function()
 		local DropdownItem = Instance.new("Frame")
@@ -4820,13 +5150,18 @@ function Compkiller:_LoadDropdown(BaseParent: TextButton , Callback: () -> any)
 	local ClearDropdown = function()
 		for i,v in next , ScrollingFrame:GetChildren() do
 			if v:IsA('Frame') then
+				Compkiller.RuntimeStats.DropdownItemsCleared += 1;
+				Compkiller:_RemoveThemeTree(v);
 				v:Destroy();
 			end;
 		end;
 
 		for i,v in next,  __signals do
-			v:Disconnect();
+			ToggleDb:Disconnect(v);
 		end;
+		table.clear(__signals);
+		table.clear(Buttons);
+		DataFrame = nil;
 	end;
 
 	local IsDefault = function(v)
@@ -4838,20 +5173,21 @@ function Compkiller:_LoadDropdown(BaseParent: TextButton , Callback: () -> any)
 	end;
 
 	local UpdateDropdown = function()
-		local DataFrame;
-
+		Compkiller.RuntimeStats.DropdownRebuilds += 1;
 		if IsMulti then
 			DataFrame = {};
 		end;
 
 		for i,v in next , Values do
 			local bth = DrawButton();
+			Compkiller.RuntimeStats.DropdownItemsCreated += 1;
 
 			bth.BlockText.Text = tostring(v);
 
 			bth.DropdownItem.Parent = ScrollingFrame;
 
 			bth.Value = v;
+			table.insert(Buttons, bth);
 
 			table.insert(__signals , ToggleDb:Connect(function(bool)
 				if bool then
@@ -4939,19 +5275,24 @@ function Compkiller:_LoadDropdown(BaseParent: TextButton , Callback: () -> any)
 		ToggleUI(not isCurrentlyOpen);
 	end);
 
-	_SafeConnect(UserInputService.InputBegan, function(Input)
+	Compkiller:_TrackConnection(BaseParent, _SafeConnect(UserInputService.InputBegan, function(Input)
 		if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
 			-- 點擊外部時關閉（排除下拉視窗和按鈕本身）
 			if not Compkiller:_IsMouseOverFrame(DropdownWindow) and not Compkiller:_IsMouseOverFrame(BaseParent) then
 				ToggleUI(false);
 			end;
 		end;
-	end);
+	end));
 
 	local Args = {};
 
 	function Args:SetDefault(v)
 		Default = v;
+		for _, ButtonData in next, Buttons do
+			Compkiller:_Animation(ButtonData.BlockText,TweenInfo.new(0.2),{
+				TextTransparency = (IsDefault(ButtonData.Value) and 0) or 0.5
+			});
+		end;
 	end;
 
 	function Args:SetData(Def,Val,Multi,Vis)
@@ -5199,7 +5540,7 @@ function Compkiller:_LoadElement(Parent: Frame , EnabledLine: boolean , Signal ,
 		end;
 
 		if Config.Flag then
-			Compkiller.Flags[Config.Flag] = Args;
+			Compkiller:_RegisterFlag(Config.Flag, Args, Parent);
 		end;
 
 		return Args;
@@ -5289,7 +5630,7 @@ function Compkiller:_LoadElement(Parent: Frame , EnabledLine: boolean , Signal ,
 		end;
 
 		if Config.Flag then
-			Compkiller.Flags[Config.Flag] = Args;
+			Compkiller:_RegisterFlag(Config.Flag, Args, Parent);
 		end;
 
 		return Args;
@@ -5841,20 +6182,20 @@ function Compkiller:_LoadElement(Parent: Frame , EnabledLine: boolean , Signal ,
 			end)
 
 			-- 全局監聽放開事件，確保任何位置放開都會停止拖動
-			_SafeConnect(UserInputService.InputEnded, function(Input)
+			Compkiller:_TrackConnection(Slider, _SafeConnect(UserInputService.InputEnded, function(Input)
 				if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
 					IsHold = false
 				end
-			end)
+			end))
 
 			-- 拖動時持續追蹤，不再檢查是否在滑桿範圍內
-			_SafeConnect(UserInputService.InputChanged, function(Input)
+			Compkiller:_TrackConnection(Slider, _SafeConnect(UserInputService.InputChanged, function(Input)
 				if IsHold then
 					if Input.UserInputType == Enum.UserInputType.MouseMovement or Input.UserInputType == Enum.UserInputType.Touch then
 						Update(Input)
 					end
 				end
-			end);
+			end));
 		end;
 
 		local Args = {};
@@ -5964,7 +6305,7 @@ function Compkiller:_LoadElement(Parent: Frame , EnabledLine: boolean , Signal ,
 		end;
 
 		if Config.Flag then
-			Compkiller.Flags[Config.Flag] = Args;
+			Compkiller:_RegisterFlag(Config.Flag, Args, Parent);
 		end;
 
 		if not DisableStackKeybind then
@@ -6539,7 +6880,7 @@ function Compkiller:_LoadElement(Parent: Frame , EnabledLine: boolean , Signal ,
 		end;
 
 		if Config.Flag then
-			Compkiller.Flags[Config.Flag] = Args;
+			Compkiller:_RegisterFlag(Config.Flag, Args, Parent);
 		end;
 
 		return Args;
@@ -6824,7 +7165,7 @@ function Compkiller:_LoadElement(Parent: Frame , EnabledLine: boolean , Signal ,
 		end;
 
 		if Config.Flag then
-			Compkiller.Flags[Config.Flag] = Args;
+			Compkiller:_RegisterFlag(Config.Flag, Args, Parent);
 		end;
 
 		return Args;
@@ -7233,7 +7574,7 @@ function Compkiller:_LoadElement(Parent: Frame , EnabledLine: boolean , Signal ,
 		end;
 
 		if Config.Flag then
-			Compkiller.Flags[Config.Flag] = Args;
+			Compkiller:_RegisterFlag(Config.Flag, Args, Parent);
 		end;
 
 		return Args;
@@ -7462,7 +7803,8 @@ function Compkiller:_LoadElement(Parent: Frame , EnabledLine: boolean , Signal ,
 
 			ValueText.Text = DaTabarser(Config.Default);
 
-			repi:SetData(Config.Default,Config.Values,Config.Multi,true);
+			-- 選取值改變不需要重建所有選項；下次展開時會依 Default 更新高亮。
+			repi:SetDefault(Config.Default);
 
 			Config.Callback(Value);
 		end;
@@ -7477,9 +7819,25 @@ function Compkiller:_LoadElement(Parent: Frame , EnabledLine: boolean , Signal ,
 		end;
 
 		function Args:SetValues(v)
+			local IsSame = #Config.Values == #v;
+			if IsSame then
+				for Index, Value in ipairs(v) do
+					if Config.Values[Index] ~= Value then
+						IsSame = false;
+						break;
+					end;
+				end;
+			end;
+
+			if IsSame then
+				Compkiller.RuntimeStats.DropdownNoops += 1;
+				return false;
+			end;
+
 			Config.Values = v;
 
 			repi:SetData(Config.Default,Config.Values,Config.Multi,true);
+			return true;
 		end;
 
 		Args.Signal = Signal:Connect(function(bool)
@@ -7558,7 +7916,7 @@ function Compkiller:_LoadElement(Parent: Frame , EnabledLine: boolean , Signal ,
 		end;
 
 		if Config.Flag then
-			Compkiller.Flags[Config.Flag] = Args;
+			Compkiller:_RegisterFlag(Config.Flag, Args, Parent);
 		end;
 
 		return Args;
@@ -7770,16 +8128,21 @@ function Compkiller.new(Config : Window)
 
 	local TabHover = Compkiller.__SIGNAL(false);
 	local WindowOpen = Compkiller.__SIGNAL(true);
-	local WindowArgs = {
+	local WindowArgs: any = {
 		SelectedTab = nil,
 		Tabs = {},
 		LastTab = nil,
 		IsOpen = true,
 		AlwayShowTab = true, -- 永遠顯示 Tab 列
 		THREADS = {},
+		Connections = {},
+		Signals = {},
 		PerformanceMode = false,
 		Notify = Compkiller.newNotify()
 	};
+	table.insert(WindowArgs.Signals, TabHover);
+	table.insert(WindowArgs.Signals, WindowOpen);
+	local OldDelayThread;
 
 	WindowArgs.Username = LocalPlayer.Name;
 
@@ -7807,8 +8170,6 @@ function Compkiller.new(Config : Window)
 	local ExpireText = Instance.new("TextLabel")
 	local TabMainFrame = Instance.new("Frame")
 
-	Compkiller:_DrawKeybinds(CompKiller);
-
 	_PropChanged(UIListLayout, 'AbsoluteContentSize', function()
 		TabButtonScrollingFrame.CanvasSize = UDim2.fromOffset(0,UIListLayout.AbsoluteContentSize.Y)
 	end);
@@ -7822,6 +8183,7 @@ function Compkiller.new(Config : Window)
 	Compkiller.ProtectGui(CompKiller);
 
 	WindowArgs.Root = CompKiller;
+	Compkiller.WindowArgsByRoot[CompKiller] = WindowArgs;
 
 	table.insert(Compkiller.Windows , CompKiller);
 
@@ -8226,6 +8588,7 @@ function Compkiller.new(Config : Window)
 
 	do
 		local Signal = Compkiller.__SIGNAL(false);
+		table.insert(WindowArgs.Signals, Signal);
 
 		local UserSettings = Instance.new("Frame")
 		local UICorner = Instance.new("UICorner")
@@ -8481,6 +8844,7 @@ function Compkiller.new(Config : Window)
 
 		local Tween = TweenInfo.new(0.35,Enum.EasingStyle.Quint);
 		local TabOpenSignal = Compkiller.__SIGNAL(false);
+		table.insert(WindowArgs.Signals, TabOpenSignal);
 
 		local TabArgs = {
 			__Current = nil,
@@ -8763,6 +9127,7 @@ function Compkiller.new(Config : Window)
 			});
 
 			local InternalSignal = Compkiller.__SIGNAL(false);
+			table.insert(WindowArgs.Signals, InternalSignal);
 			local Frame = Instance.new("Frame")
 			local UICorner = Instance.new("UICorner")
 			local UIStroke = Instance.new("UIStroke")
@@ -8934,13 +9299,9 @@ function Compkiller.new(Config : Window)
 			Scrolling.CanvasSize = UDim2.fromOffset(0,UilistLayout.AbsoluteContentSize.Y + 5)
 		end;
 
-		_PropChanged(UIListLayout, "AbsoluteContentSize", upd);
-
-		return task.defer(function()
-			while true do task.wait(2) -- 優化性能：從 1s 改為 2s
-				upd();
-			end;
-		end)
+		local Connection = _PropChanged(UIListLayout, "AbsoluteContentSize", upd);
+		task.defer(upd);
+		return Connection;
 
 		--[[local Parent: ScrollingFrame = UilistLayout.Parent;
 
@@ -8980,6 +9341,7 @@ function Compkiller.new(Config : Window)
 		});
 
 		local TabOpenSignal = Compkiller.__SIGNAL(false);
+		table.insert(WindowArgs.Signals, TabOpenSignal);
 		local TabArgs = {};
 
 		-- Button --
@@ -10081,13 +10443,15 @@ function Compkiller.new(Config : Window)
 
 				for i,v in next, ScrollingFrame:GetChildren() do
 					if v:IsA('Frame') and v.Name ~= "Space" then
+						Compkiller:_RemoveThemeTree(v);
 						v:Destroy();
 					end;
 				end;
 
 				for i,v in next , __signals do
-					v:Disconnect();
+					TabOpenSignal:Disconnect(v);
 				end;
+				table.clear(__signals);
 
 				for i,v in next , FullConfig do
 					local Button = TabArgs:_DrawConfig();
@@ -10150,6 +10514,7 @@ function Compkiller.new(Config : Window)
 					end;
 				end;
 			end);
+			table.insert(WindowArgs.THREADS, Init.THREAD);
 
 			return Init;
 		end;
@@ -10165,6 +10530,7 @@ function Compkiller.new(Config : Window)
 		});
 
 		local TabOpenSignal = Compkiller.__SIGNAL(false);
+		table.insert(WindowArgs.Signals, TabOpenSignal);
 		local TabArgs = {};
 		local Upvalue = {};
 		local BASE_PADDING = 10;
@@ -11070,6 +11436,7 @@ function Compkiller.new(Config : Window)
 
 		function WindowArgs:Watermark()
 			local Signal = Compkiller.__SIGNAL(true);
+			table.insert(WindowArgs.Signals, Signal);
 
 			local Watermark = Instance.new("Frame")
 			local UICorner = Instance.new("UICorner")
@@ -11278,7 +11645,14 @@ function Compkiller.new(Config : Window)
 				MainFrame.Visible = Value;
 			end;
 
-			ToggleCloseUI(not Value);
+			if Compkiller:_IsMobile() then
+				ToggleCloseUI(true);
+				Compkiller:_Animation(ImageLabel,TweenInfo.new(0.2),{
+					ImageTransparency = Value and 0.35 or 0.1
+				});
+			else
+				ToggleCloseUI(not Value);
+			end;
 			WindowOpen:Fire(Value);
 
 			if Value then
@@ -11313,35 +11687,14 @@ function Compkiller.new(Config : Window)
 			end);
 		end;
 
-		table.insert(WindowArgs.THREADS,task.spawn(function()
-			while true do task.wait(0.3) -- 優化性能：從 150ms 改為 300ms
-				if Compkiller:_IsMobile() then
-					ToggleCloseUI(true);
 
-					if WindowArgs.IsOpen then
-						Compkiller:_Animation(ImageLabel,TweenInfo.new(0.2),{
-							ImageTransparency = 0.35
-						});
+		if Compkiller:_IsMobile() then
+			ToggleCloseUI(true);
+		else
+			ToggleCloseUI(false);
+		end;
 
-						ImageLabel:GetAttribute("Hover",false);
-					else
-						ImageLabel:GetAttribute("Hover",true);
-
-						Compkiller:_Animation(ImageLabel,TweenInfo.new(0.2),{
-							ImageTransparency = 0.1
-						});
-					end;
-				else
-					if not WindowArgs.IsOpen then
-						ToggleCloseUI(true);
-					else
-						ToggleCloseUI(false);
-					end
-				end;
-			end
-		end));
-
-		_SafeConnect(UserInputService.InputBegan, function(Input,Typing)
+		WindowArgs.MenuInputConnection = _SafeConnect(UserInputService.InputBegan, function(Input,Typing)
 			if not Typing and (Input.KeyCode == Config.Keybind or Input.KeyCode.Name == Config.Keybind) then
 				WindowArgs:_ToggleUI()
 			end;
@@ -11362,7 +11715,39 @@ function Compkiller.new(Config : Window)
 		return Compkiller.DragLocked;
 	end;
 
-	function WindowArgs:Destroy()
+	function WindowArgs:Destroy(SkipRootDestroy)
+		if WindowArgs.Destroyed then
+			return;
+		end;
+		WindowArgs.Destroyed = true;
+
+		local KeybindCache = Compkiller.__KEYBINDS_CACHE;
+		local KeybindRef = type(KeybindCache) == "table" and KeybindCache[CompKiller];
+		if KeybindRef then
+			KeybindRef:Destroy();
+		end;
+
+		if OldDelayThread then
+			task.cancel(OldDelayThread);
+			OldDelayThread = nil;
+		end;
+
+		if WindowArgs.MenuInputConnection then
+			WindowArgs.MenuInputConnection:Disconnect();
+			WindowArgs.MenuInputConnection = nil;
+		end;
+		if WindowArgs.RootDestroyingConnection then
+			WindowArgs.RootDestroyingConnection:Disconnect();
+			WindowArgs.RootDestroyingConnection = nil;
+		end;
+
+		if WindowArgs.Connections then
+			for _, Connection in next, WindowArgs.Connections do
+				Connection:Disconnect();
+			end;
+			table.clear(WindowArgs.Connections);
+		end;
+
 		-- 取消所有線程
 		if WindowArgs.THREADS then
 			for i, thread in pairs(WindowArgs.THREADS) do
@@ -11389,14 +11774,38 @@ function Compkiller.new(Config : Window)
 			table.clear(WindowArgs.Tabs);
 		end
 
+		if WindowArgs.Signals then
+			for _, Signal in next, WindowArgs.Signals do
+				Signal:Destroy();
+			end;
+			table.clear(WindowArgs.Signals);
+		end;
+
 		-- 從全局窗口列表中移除
 		local windowIndex = table.find(Compkiller.Windows, CompKiller);
 		if windowIndex then
 			table.remove(Compkiller.Windows, windowIndex);
 		end
+		Compkiller.WindowArgsByRoot[CompKiller] = nil;
+
+		for Flag, WindowRoot in next, Compkiller.FlagOwners do
+			if WindowRoot == CompKiller then
+				Compkiller.Flags[Flag] = nil;
+				Compkiller.FlagOwners[Flag] = nil;
+			end;
+		end;
+
+		for Element, WindowRoot in next, Compkiller.WindowsNil do
+			if WindowRoot == CompKiller then
+				Compkiller:_RemoveThemeTree(Element);
+				Element:Destroy();
+				Compkiller.WindowsNil[Element] = nil;
+			end;
+		end;
+		Compkiller:_RemoveThemeTree(CompKiller);
 
 		-- 銷毀主GUI
-		if CompKiller then
+		if CompKiller and not SkipRootDestroy then
 			CompKiller:Destroy();
 		end
 
@@ -11405,6 +11814,10 @@ function Compkiller.new(Config : Window)
 		WindowArgs.SelectedTab = nil;
 		WindowArgs.LastTab = nil;
 	end;
+
+	WindowArgs.RootDestroyingConnection = _SafeConnect(CompKiller.Destroying, function()
+		WindowArgs:Destroy(true);
+	end);
 
 	function WindowArgs:Update(config: WindowUpdate)
 		config = config or {};
@@ -11434,6 +11847,9 @@ function Compkiller.new(Config : Window)
 
 	WindowArgs.LOOP_THREAD = task.spawn(function()
 		local TimeTic = tick();
+		local LastSelectionVisible = nil;
+		local LastSelectionY = nil;
+		local LastMovementWidth = nil;
 
 		-- [已移除模糊效果] 避免拖動時的延遲問題
 		-- local BlurElement = Instance.new("Frame")
@@ -11471,38 +11887,55 @@ function Compkiller.new(Config : Window)
 			Property = "BackgroundColor3"
 		});
 
-		while true do task.wait(0.033); -- ~30 FPS，優化性能（原本 0.01）
+		while true do task.wait(0.05); -- 約 20 FPS，只在目標狀態改變時建立 Tween
 			-- BlurElement.Size = UDim2.new(1, TabFrame.AbsoluteSize.X - 35, 1, 0);
-			MovementFrame.Size = UDim2.new(1, TabFrame.AbsoluteSize.X - 35, 1, 0);
+			local MovementWidth = TabFrame.AbsoluteSize.X - 35;
+			if LastMovementWidth ~= MovementWidth then
+				LastMovementWidth = MovementWidth;
+				MovementFrame.Size = UDim2.new(1, MovementWidth, 1, 0);
+			end;
 
-			SelectionFrame.BackgroundColor3 = Compkiller.Colors.Highlight;
+			if SelectionFrame.BackgroundColor3 ~= Compkiller.Colors.Highlight then
+				SelectionFrame.BackgroundColor3 = Compkiller.Colors.Highlight;
+			end;
 
 			if WindowArgs.SelectedTab and WindowArgs.IsOpen then
 				local vili = -(TabButtons.AbsolutePosition.Y - WindowArgs.SelectedTab.AbsolutePosition.Y) + 4;
 				local distance = (SelectionFrame.Position.Y.Offset - vili);
 
 				if vili < 0 or vili > TabButtons.AbsoluteSize.Y then
-					Compkiller:_Animation(SelectionFrame , TweenInfo.new(0.1) , {
-						BackgroundTransparency = 1
-					});
-				else
-					if math.abs(distance) <= 10 then
+					if LastSelectionVisible ~= false then
+						LastSelectionVisible = false;
 						Compkiller:_Animation(SelectionFrame , TweenInfo.new(0.1) , {
-							BackgroundTransparency = 0
+							BackgroundTransparency = 1
 						});
+					end;
+				else
+					local TargetY = math.ceil(vili);
+					if LastSelectionVisible ~= true or LastSelectionY ~= TargetY then
+						LastSelectionVisible = true;
+						LastSelectionY = TargetY;
+						if math.abs(distance) <= 10 then
+							Compkiller:_Animation(SelectionFrame , TweenInfo.new(0.1) , {
+								BackgroundTransparency = 0
+							});
 
-						SelectionFrame.Position = UDim2.new(1,5,0,math.ceil(vili));
-					else
-						Compkiller:_Animation(SelectionFrame , TweenInfo.new(0.15) , {
-							BackgroundTransparency = 0,
-							Position = UDim2.new(1,5,0,math.ceil(vili))
-						});
+							SelectionFrame.Position = UDim2.new(1,5,0,TargetY);
+						else
+							Compkiller:_Animation(SelectionFrame , TweenInfo.new(0.15) , {
+								BackgroundTransparency = 0,
+								Position = UDim2.new(1,5,0,TargetY)
+							});
+						end;
 					end;
 				end;
 			else
-				Compkiller:_Animation(SelectionFrame , TweenInfo.new(0.15) , {
-					BackgroundTransparency = 1
-				});
+				if LastSelectionVisible ~= false then
+					LastSelectionVisible = false;
+					Compkiller:_Animation(SelectionFrame , TweenInfo.new(0.15) , {
+						BackgroundTransparency = 1
+					});
+				end;
 			end;
 
 			if WindowArgs.AlwayShowTab then
@@ -11513,7 +11946,6 @@ function Compkiller.new(Config : Window)
 
 	WindowArgs:Update();
 
-	local OldDelayThread;
 	local DurationTime = tick();
 
 	Compkiller:_Hover(TabFrame , function()
@@ -11897,6 +12329,7 @@ function Compkiller:Loader(IconId,Duration)
 				task.wait(0.2)
 
 				task.delay(3,function()
+					Compkiller:_RemoveThemeTree(CompKiller);
 					CompKiller:Destroy();
 				end)
 			end)
@@ -12106,6 +12539,7 @@ function Compkiller.newNotify()
 				});
 
 				task.wait(0.35)
+				Compkiller:_RemoveThemeTree(BlockFrame);
 				BlockFrame:Destroy();
 
 			end;
