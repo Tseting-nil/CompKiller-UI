@@ -3,7 +3,7 @@
 	原始 Github:https://github.com/4lpaca-pin/CompKiller
 	修改版 Github: https://github.com/Tseting-nil/CompKiller-UI
 	具體參考:https://tseting-nil.github.io/CompKiller-UI/%E8%AA%AA%E6%98%8E%E6%9B%B8.html#load-lib
-	版本:2026/08/16
+	版本:2026/08/25
 --]]
 
 --找functuon
@@ -8280,7 +8280,7 @@ function Compkiller.new(Config : Window)
 
 	UICorner.Parent = MainFrame
 
-	local TabFrameBaseTrans = 0.25;
+	local TabFrameBaseTrans = 0.05;
 
 	TabFrame.Active = true
 	TabFrame.Name = Compkiller:_RandomString()
