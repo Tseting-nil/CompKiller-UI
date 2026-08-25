@@ -239,7 +239,7 @@
             <h1>Compkiller UI</h1>
             <div class="version-info">
                 <div>版本: 2026/08/16</div>
-                <div>最後更新: 2026/08/16</div>
+                <div>最後更新: 2026/08/25</div>
             </div>
         </div>
         <nav class="sidebar-nav">
@@ -818,33 +818,66 @@ local toggle = Section:AddToggle({
                 <h2>配置管理器</h2>
                 <div class="table-container">
                     <table>
-                        <thead><tr><th>參數</th><th>類型</th><th>必填</th><th>說明</th></tr></thead>
+                        <thead><tr><th>參數</th><th>類型</th><th>必填</th><th>預設值</th><th>說明</th></tr></thead>
                         <tbody>
-                            <tr><td><code>Directory</code></td><td>string</td><td>✓</td><td>工作區資料夾</td></tr>
-                            <tr><td><code>Config</code></td><td>string</td><td>✓</td><td>腳本設定資料夾</td></tr>
+                            <tr><td><code>RootDirectory</code></td><td>string</td><td>✗</td><td><code>nil</code></td><td>自訂配置儲存根目錄；設定時優先於 <code>Directory</code></td></tr>
+                            <tr><td><code>Directory</code></td><td>string</td><td>✗</td><td><code>Compkiller</code></td><td>舊版根目錄參數，保留向下相容</td></tr>
+                            <tr><td><code>Config</code></td><td>string</td><td>✗</td><td><code>Software</code></td><td>根目錄內的配置子目錄</td></tr>
+                            <tr><td><code>AutoLoad</code></td><td>boolean</td><td>✗</td><td><code>false</code></td><td>設定分頁初始化時載入上次選擇的配置</td></tr>
                         </tbody>
                     </table>
                 </div>
                 <pre><code class="language-lua">local ConfigManager = Compkiller:ConfigManager({
-    Directory = "Compkiller-UI",
+    RootDirectory = "Compkiller-UI/Saves",
     Config = "Example-Configs",
+    AutoLoad = true,
 });
 </code></pre>
+                <p>實際配置路徑為 <code>RootDirectory/Config</code>。舊程式仍可使用 <code>Directory</code>，但新程式建議改用語意較明確的 <code>RootDirectory</code>。</p>
 
                 <h3>ConfigManager 方法</h3>
                 <div class="table-container">
                     <table>
-                        <thead><tr><th>方法</th><th>說明</th></tr></thead>
+                        <thead><tr><th>方法／屬性</th><th>回傳值</th><th>說明</th></tr></thead>
                         <tbody>
-                            <tr><td><code>WriteConfig({ Name, Author })</code></td><td>寫入設定檔</td></tr>
-                            <tr><td><code>LoadConfig("名稱")</code></td><td>載入設定檔</td></tr>
-                            <tr><td><code>DeleteConfig("名稱")</code></td><td>刪除設定檔</td></tr>
-                            <tr><td><code>ReadInfo("名稱")</code></td><td>讀取設定檔資訊</td></tr>
-                            <tr><td><code>GetConfigs()</code></td><td>取得所有設定檔</td></tr>
-                            <tr><td><code>.Directory</code></td><td>設定檔目錄路徑</td></tr>
+                            <tr><td><code>SetRootDirectory("根目錄", "配置子目錄"?)</code></td><td><code>boolean, string?</code></td><td>切換儲存根目錄，可選擇同時切換配置子目錄</td></tr>
+                            <tr><td><code>GetRootDirectory()</code></td><td><code>string</code></td><td>取得目前儲存根目錄</td></tr>
+                            <tr><td><code>SetConfigDirectory("配置子目錄")</code></td><td><code>boolean, string?</code></td><td>在相同根目錄下切換配置子目錄</td></tr>
+                            <tr><td><code>GetConfigDirectory()</code></td><td><code>string</code></td><td>取得目前配置子目錄名稱</td></tr>
+                            <tr><td><code>WriteConfig({ Name, Author })</code></td><td><code>boolean, string?</code></td><td>將目前 Flags 寫入設定檔</td></tr>
+                            <tr><td><code>LoadConfig("名稱")</code></td><td><code>boolean</code></td><td>載入設定檔並記錄為上次選擇</td></tr>
+                            <tr><td><code>LoadConfigFromString("JSON")</code></td><td><code>boolean, string?</code></td><td>從 JSON 字串載入設定，不修改上次配置記錄</td></tr>
+                            <tr><td><code>RenameConfig("舊名稱", "新名稱")</code></td><td><code>boolean, string?</code></td><td>修改設定檔名稱及其中的資訊名稱</td></tr>
+                            <tr><td><code>DeleteConfig("名稱")</code></td><td><code>boolean, string?</code></td><td>刪除設定檔，必要時同步清除上次配置記錄</td></tr>
+                            <tr><td><code>ReadInfo("名稱")</code></td><td><code>table | false</code></td><td>讀取設定檔的 <code>__INFORMATION</code></td></tr>
+                            <tr><td><code>GetConfigs()</code></td><td><code>{string}</code></td><td>取得已排序的設定檔名稱，不包含內部記錄檔</td></tr>
+                            <tr><td><code>GetFullConfigs()</code></td><td><code>{{ Name, Info }}</code></td><td>取得可供內建配置介面顯示的完整資料</td></tr>
+                            <tr><td><code>GetConfigCount()</code></td><td><code>number</code></td><td>取得設定檔數量，不包含內部記錄檔</td></tr>
+                            <tr><td><code>GetCurrentConfig()</code></td><td><code>table</code></td><td>取得目前可儲存的 Flags 資料</td></tr>
+                            <tr><td><code>SetLastConfig("名稱")</code></td><td><code>boolean</code></td><td>指定上次選擇的配置</td></tr>
+                            <tr><td><code>GetLastConfig()</code></td><td><code>string?</code></td><td>取得上次選擇且仍存在的配置名稱</td></tr>
+                            <tr><td><code>LoadLastConfig()</code></td><td><code>boolean</code></td><td>載入上次選擇的配置</td></tr>
+                            <tr><td><code>AutoLoadLastConfig()</code></td><td><code>boolean</code></td><td>依 <code>AutoLoad</code> 自動載入，每個管理器實例只嘗試一次</td></tr>
+                            <tr><td><code>ClearLastConfig()</code></td><td>無</td><td>清除上次配置記錄</td></tr>
+                            <tr><td><code>.RootDirectory</code></td><td><code>string</code></td><td>目前儲存根目錄</td></tr>
+                            <tr><td><code>.ConfigDirectory</code></td><td><code>string</code></td><td>目前配置子目錄</td></tr>
+                            <tr><td><code>.Directory</code></td><td><code>string</code></td><td>完整配置路徑</td></tr>
+                            <tr><td><code>.AutoLoad</code></td><td><code>boolean</code></td><td>是否允許自動載入上次配置</td></tr>
                         </tbody>
                     </table>
                 </div>
+
+                <h3>執行期間修改儲存位置</h3>
+                <pre><code class="language-lua">-- 只切換根目錄，沿用目前的配置子目錄
+local Success, ErrorMessage = ConfigManager:SetRootDirectory("MyHub/Saves")
+
+-- 同時切換根目錄與配置子目錄
+ConfigManager:SetRootDirectory("MyHub/Saves", "AnimeAura")
+
+-- 只切換配置子目錄
+ConfigManager:SetConfigDirectory("AnotherGame")
+</code></pre>
+                <p>切換儲存位置只會讓管理器改用新路徑並建立所需目錄，不會搬移、複製或刪除舊目錄中的配置。切換後 <code>AutoLoadLastConfig()</code> 可再次嘗試載入新路徑中的上次配置。</p>
 
                 <h3>建立設定分頁 (DrawConfig)</h3>
                 <pre><code class="language-lua">local ConfigUI = Window:DrawConfig({
@@ -854,6 +887,8 @@ local toggle = Section:AddToggle({
 });
 ConfigUI:Init();
 </code></pre>
+                <p>當 <code>AutoLoad = true</code> 時，使用者按下設定項目的 <strong>Load</strong> 後，該配置會成為「上次選擇的配置」；下次執行 <code>ConfigUI:Init()</code> 時會自動載入一次。記錄保存在隱藏的 <code>__last_config.json</code> 中，不會出現在配置清單或配置數量內。</p>
+                <p>若要在內建設定分頁修改名稱，先在 <strong>Config Name</strong> 輸入新名稱，再按目標配置右側的鉛筆按鈕。改名後，上次配置記錄也會同步更新。</p>
                 <figure>
                     <img src="https://2162411976-files.gitbook.io/~/files/v0/b/gitbook-x-prod.appspot.com/o/spaces%2Fu67EfmlwtAtmGvLQtoft%2Fuploads%2FVtNqgtwn3s9HPdsPq6NT%2Fimage.png?alt=media&token=0b0e53b5-928b-4385-920f-d8e1a549ea8f" alt="Config Preview">
                     <figcaption>設定分頁預覽</figcaption>

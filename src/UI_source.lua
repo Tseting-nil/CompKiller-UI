@@ -22,8 +22,10 @@ export type Window = {
 };
 
 export type ConfigManager = {
-	Directory: string,
-	Config: string,
+	RootDirectory: string?,
+	Directory: string?,
+	Config: string?,
+	AutoLoad: boolean?,
 };
 
 export type WriteConfig = {
@@ -40,14 +42,29 @@ export type WindowUpdate = {
 };
 
 export type ConfigFunctions = {
+	RootDirectory: string,
+	ConfigDirectory: string,
 	Directory: string,
+	AutoLoad: boolean,
+	SetRootDirectory: (self: ConfigFunctions, RootDirectory: string, ConfigDirectory: string?) -> (boolean, string?),
+	GetRootDirectory: (self: ConfigFunctions) -> string,
+	SetConfigDirectory: (self: ConfigFunctions, ConfigDirectory: string) -> (boolean, string?),
+	GetConfigDirectory: (self: ConfigFunctions) -> string,
 	WriteConfig: (self: ConfigFunctions , Config: WriteConfig) -> any?,
+	LoadConfigFromString: (self: ConfigFunctions, ConfigJson: string) -> (boolean, string?),
+	GetCurrentConfig: (self: ConfigFunctions) -> any,
 	ReadInfo: (self: ConfigFunctions , ConfigName: string) -> any?,
 	DeleteConfig: (self: ConfigFunctions , ConfigName: string) -> any?,
 	LoadConfig: (self: ConfigFunctions , ConfigName: string) -> any?,
-	GetConfigs: (self: ConfigFunctions , ConfigName: string) -> {string},
+	RenameConfig: (self: ConfigFunctions , OldName: string, NewName: string) -> (boolean, string?),
+	SetLastConfig: (self: ConfigFunctions , ConfigName: string) -> boolean,
+	GetLastConfig: (self: ConfigFunctions) -> string?,
+	ClearLastConfig: (self: ConfigFunctions) -> any?,
+	LoadLastConfig: (self: ConfigFunctions) -> boolean,
+	AutoLoadLastConfig: (self: ConfigFunctions) -> boolean,
+	GetConfigs: (self: ConfigFunctions) -> {string},
 	GetConfigCount: (self: ConfigFunctions) -> number,
-	GetFullConfigs: (self: ConfigFunctions , ConfigName: string) -> {
+	GetFullConfigs: (self: ConfigFunctions) -> {
 		{
 			Name: string,
 			Info: {
@@ -10088,6 +10105,8 @@ function Compkiller.new(Config : Window)
 			local UICorner_3 = Instance.new("UICorner")
 			local AuthorText = Instance.new("TextLabel")
 			local DelButton = Instance.new("ImageButton")
+			local RenameButton = Instance.new("ImageButton")
+			local RenameCorner = Instance.new("UICorner")
 			local UICorner = Instance.new("UICorner")
 			local UIGradient = Instance.new("UIGradient")
 
@@ -10106,6 +10125,22 @@ function Compkiller.new(Config : Window)
 
 			UICorner.CornerRadius = UDim.new(1, 0)
 			UICorner.Parent = DelButton
+
+			RenameButton.Name = Compkiller:_RandomString()
+			RenameButton.Parent = LinkValues
+			RenameButton.BackgroundTransparency = 1.000
+			RenameButton.BorderColor3 = Color3.fromRGB(0, 0, 0)
+			RenameButton.BorderSizePixel = 0
+			RenameButton.LayoutOrder = -9998
+			RenameButton.Size = UDim2.new(0, 35, 0, 15)
+			RenameButton.ZIndex = 14
+			RenameButton.Image = Compkiller:_GetIcon("pencil")
+			RenameButton.ImageColor3 = Compkiller.Colors.Highlight
+			RenameButton.ImageTransparency = 0.300
+			RenameButton.ScaleType = Enum.ScaleType.Fit
+
+			RenameCorner.CornerRadius = UDim.new(1, 0)
+			RenameCorner.Parent = RenameButton
 			ConfigBlock.Name = Compkiller:_RandomString()
 			ConfigBlock.Parent = ScrollingFrame
 			ConfigBlock.BackgroundColor3 = Color3.fromRGB(33, 34, 40)
@@ -10473,10 +10508,16 @@ function Compkiller.new(Config : Window)
 			_SafeConnect(DelButton.MouseButton1Click, function()
 				task.spawn(ConfigButton.OnDelete);
 			end)
+			_SafeConnect(RenameButton.MouseButton1Click, function()
+				if ConfigButton.OnRename then
+					task.spawn(ConfigButton.OnRename);
+				end;
+			end)
 
 			ConfigButton.OnLoad = nil;
 			ConfigButton.OnSave = nil;
 			ConfigButton.OnDelete = nil;
+			ConfigButton.OnRename = nil;
 
 			return ConfigButton;
 		end;
@@ -10500,7 +10541,8 @@ function Compkiller.new(Config : Window)
 				end;
 			end);
 
-			local Refresh = function()
+			local Refresh;
+			Refresh = function()
 				local FullConfig = Configuration.Config:GetFullConfigs();
 
 				for i,v in next, ScrollingFrame:GetChildren() do
@@ -10558,19 +10600,51 @@ function Compkiller.new(Config : Window)
 
 						Configuration.Config:DeleteConfig(v.Name)
 					end
+
+					Button.OnRename = function()
+						local NewName = TextBox.Text;
+						if not NewName:byte() then
+							WindowArgs.Notify.new({
+								Title = "Configs",
+								Icon = Compkiller:_GetIcon("pencil"),
+								Content = "Enter a new config name first"
+							});
+							return;
+						end;
+
+						local Success, ErrorMessage = Configuration.Config:RenameConfig(v.Name, NewName);
+						WindowArgs.Notify.new({
+							Title = "Configs",
+							Icon = Compkiller:_GetIcon("pencil"),
+							Content = Success and ("Rename config \""..v.Name.."\" to \""..NewName.."\"")
+								or ("Rename failed: "..tostring(ErrorMessage))
+						});
+						if Success then
+							TextBox.Text = "";
+							Refresh();
+						end;
+					end;
 				end;
 			end;
 
 			Refresh();
+			if Configuration.Config.AutoLoad then
+				task.defer(function()
+					Configuration.Config:AutoLoadLastConfig();
+				end);
+			end;
 
 			Init.THREAD = task.spawn(function()
 				local OldIndex = Configuration.Config:GetConfigCount();
+				local OldDirectory = Configuration.Config.Directory;
 
 				while true do task.wait(0.5); -- 優化性能：從 125ms 改為 500ms
 					local CountInDirectory = Configuration.Config:GetConfigCount();
+					local CurrentDirectory = Configuration.Config.Directory;
 
-					if OldIndex ~= CountInDirectory then
+					if OldIndex ~= CountInDirectory or OldDirectory ~= CurrentDirectory then
 						OldIndex = CountInDirectory;
+						OldDirectory = CurrentDirectory;
 
 						Refresh();
 					end;
@@ -12117,30 +12191,111 @@ end;
 
 function Compkiller:ConfigManager(ConfigManager: ConfigManager) : ConfigFunctions
 	ConfigManager = Compkiller.__CONFIG(ConfigManager , {
+		RootDirectory = nil,
 		Directory = "Compkiller",
-		Config = "Software"
+		Config = "Software",
+		AutoLoad = false,
 	});
 
-	if not isfolder(ConfigManager.Directory) then
-		makefolder(ConfigManager.Directory);
+	local RootDirectory = ConfigManager.RootDirectory or ConfigManager.Directory or "Compkiller";
+	local ConfigDirectory = ConfigManager.Config or "Software";
+	if type(RootDirectory) ~= "string" or RootDirectory == "" then
+		RootDirectory = "Compkiller";
+	end;
+	if type(ConfigDirectory) ~= "string" or ConfigDirectory == "" then
+		ConfigDirectory = "Software";
 	end;
 
-	if not isfolder(Compkiller:_Path(ConfigManager.Directory , ConfigManager.Config)) then
-		makefolder(Compkiller:_Path(ConfigManager.Directory , ConfigManager.Config));
+	local EnsureDirectory = function(Directory)
+		if type(Directory) ~= "string" or Directory == "" then
+			return false, "invalid directory";
+		end;
+		local Success, ErrorMessage = pcall(function()
+			if not isfolder(Directory) then
+				makefolder(Directory);
+			end;
+		end);
+		return Success, (not Success and tostring(ErrorMessage)) or nil;
 	end;
 
-	local Args = {
-		Directory = Compkiller:_Path(ConfigManager.Directory , ConfigManager.Config);
+	EnsureDirectory(RootDirectory);
+	EnsureDirectory(Compkiller:_Path(RootDirectory, ConfigDirectory));
+
+	local Args: any = {
+		RootDirectory = RootDirectory,
+		ConfigDirectory = ConfigDirectory,
+		Directory = Compkiller:_Path(RootDirectory, ConfigDirectory),
 		EnableNotify = false,
+		AutoLoad = ConfigManager.AutoLoad == true,
+		LastConfigFile = "__last_config.json",
+		AutoLoadAttempted = false,
 	};
 
 	local notify = Compkiller.newNotify();
+
+	local ConfigPath = function(ConfigName)
+		return Compkiller:_Path(Args.Directory, ConfigName);
+	end;
+
+	local IsValidConfigName = function(ConfigName)
+		return type(ConfigName) == "string"
+			and ConfigName ~= ""
+			and ConfigName ~= "."
+			and ConfigName ~= ".."
+			and ConfigName ~= Args.LastConfigFile
+			and not string.find(ConfigName, "/", 1, true)
+			and not string.find(ConfigName, "\\", 1, true);
+	end;
+
+	local GetFileName = function(Path)
+		local Normalized = string.gsub(tostring(Path), "\\", "/");
+		return string.match(Normalized, "([^/]+)$") or Normalized;
+	end;
+
+	function Args:SetRootDirectory(NewRootDirectory: string, NewConfigDirectory: string?)
+		local TargetConfigDirectory = NewConfigDirectory or Args.ConfigDirectory;
+		if type(NewRootDirectory) ~= "string" or NewRootDirectory == ""
+			or type(TargetConfigDirectory) ~= "string" or TargetConfigDirectory == "" then
+			return false, "invalid directory";
+		end;
+
+		local Success, ErrorMessage = EnsureDirectory(NewRootDirectory);
+		if not Success then
+			return false, ErrorMessage;
+		end;
+		local NewDirectory = Compkiller:_Path(NewRootDirectory, TargetConfigDirectory);
+		Success, ErrorMessage = EnsureDirectory(NewDirectory);
+		if not Success then
+			return false, ErrorMessage;
+		end;
+
+		Args.RootDirectory = NewRootDirectory;
+		Args.ConfigDirectory = TargetConfigDirectory;
+		Args.Directory = NewDirectory;
+		Args.AutoLoadAttempted = false;
+		return true;
+	end;
+
+	function Args:GetRootDirectory()
+		return Args.RootDirectory;
+	end;
+
+	function Args:SetConfigDirectory(NewConfigDirectory: string)
+		return Args:SetRootDirectory(Args.RootDirectory, NewConfigDirectory);
+	end;
+
+	function Args:GetConfigDirectory()
+		return Args.ConfigDirectory;
+	end;
 
 	function Args:WriteConfig(Config: WriteConfig)
 		Config = Compkiller.__CONFIG(Config , {
 			Name = Compkiller:_RandomString(),
 			Author = LocalPlayer.Name,
 		});
+		if not IsValidConfigName(Config.Name) then
+			return false, "invalid config name";
+		end;
 
 		local Flags = Compkiller:GetConfig("MK");
 
@@ -12159,11 +12314,17 @@ function Compkiller:ConfigManager(ConfigManager: ConfigManager) : ConfigFunction
 			})
 		end
 
-		writefile(Compkiller:_Path(Args.Directory , Config.Name) , HttpService:JSONEncode(Flags));
+		local Success, ErrorMessage = pcall(function()
+			writefile(ConfigPath(Config.Name), HttpService:JSONEncode(Flags));
+		end);
+		return Success, (not Success and tostring(ErrorMessage)) or nil;
 	end;
 
 	function Args:LoadConfigFromString(str: string)
-		local decoded = HttpService:JSONDecode(str);
+		local DecodeSuccess, decoded = pcall(HttpService.JSONDecode, HttpService, str);
+		if not DecodeSuccess or type(decoded) ~= "table" then
+			return false, tostring(decoded);
+		end;
 
 		local Flags = Compkiller:GetConfig("KV");
 
@@ -12188,6 +12349,7 @@ function Compkiller:ConfigManager(ConfigManager: ConfigManager) : ConfigFunction
 				end;
 			end
 		end;
+		return true;
 	end;
 
 	function Args:GetCurrentConfig()
@@ -12195,14 +12357,15 @@ function Compkiller:ConfigManager(ConfigManager: ConfigManager) : ConfigFunction
 	end;
 
 	function Args:ReadInfo(ConfigName: string)
-		local _path = Compkiller:_Path(Args.Directory , ConfigName);
+		local _path = ConfigPath(ConfigName);
 
 		if isfile(_path) then
-			local info = readfile(_path);
-
-			local decoded = HttpService:JSONDecode(info);
-
-			return decoded.__INFORMATION;
+			local Success, decoded = pcall(function()
+				return HttpService:JSONDecode(readfile(_path));
+			end);
+			if Success and type(decoded) == "table" and type(decoded.__INFORMATION) == "table" then
+				return decoded.__INFORMATION;
+			end;
 		end;
 
 		return false;
@@ -12212,10 +12375,12 @@ function Compkiller:ConfigManager(ConfigManager: ConfigManager) : ConfigFunction
 		local names = {};
 
 		for i,v in next , listfiles(Args.Directory) do
-			local Name = string.sub(v , #Args.Directory + 2);
-
-			table.insert(names , Name);
+			local Name = GetFileName(v);
+			if Name ~= Args.LastConfigFile and isfile(v) then
+				table.insert(names , Name);
+			end;
 		end;
+		table.sort(names);
 
 		return names;
 	end;
@@ -12223,21 +12388,22 @@ function Compkiller:ConfigManager(ConfigManager: ConfigManager) : ConfigFunction
 	function Args:GetFullConfigs()
 		local names = {};
 
-		for i,v in next , listfiles(Args.Directory) do
-			local Name = string.sub(v , #Args.Directory + 2);
+		for _, Name in next , Args:GetConfigs() do
 			local Info = Args:ReadInfo(Name);
 
-			table.insert(names , {
-				Name = Name,
-				Info = Info,
-			});
+			if Info then
+				table.insert(names , {
+					Name = Name,
+					Info = Info,
+				});
+			end;
 		end;
 
 		return names;
 	end;
 
 	function Args:DeleteConfig(ConfigName)
-		local _path = Compkiller:_Path(Args.Directory,ConfigName);
+		local _path = ConfigPath(ConfigName);
 
 		if Args.EnableNotify then
 			notify.new({
@@ -12248,16 +12414,93 @@ function Compkiller:ConfigManager(ConfigManager: ConfigManager) : ConfigFunction
 		end
 
 		if isfile(_path) then
-			delfile(_path);
+			local WasLastConfig = Args:GetLastConfig() == ConfigName;
+			local Success, ErrorMessage = pcall(delfile, _path);
+			if Success and WasLastConfig then
+				Args:ClearLastConfig();
+			end;
+			return Success, (not Success and tostring(ErrorMessage)) or nil;
 		end;
+		return false, "config not found";
 	end;
 
 	function Args:GetConfigCount()
-		return #listfiles(Args.Directory);
+		return #Args:GetConfigs();
+	end;
+
+	function Args:SetLastConfig(ConfigName: string)
+		if not IsValidConfigName(ConfigName) or not isfile(ConfigPath(ConfigName)) then
+			return false;
+		end;
+		return pcall(function()
+			writefile(ConfigPath(Args.LastConfigFile), HttpService:JSONEncode({ Name = ConfigName }));
+		end);
+	end;
+
+	function Args:GetLastConfig()
+		local LastPath = ConfigPath(Args.LastConfigFile);
+		if not isfile(LastPath) then
+			return nil;
+		end;
+		local Success, Data = pcall(function()
+			return HttpService:JSONDecode(readfile(LastPath));
+		end);
+		local ConfigName = Success and type(Data) == "table" and Data.Name;
+		if IsValidConfigName(ConfigName) and isfile(ConfigPath(ConfigName)) then
+			return ConfigName;
+		end;
+		return nil;
+	end;
+
+	function Args:ClearLastConfig()
+		local LastPath = ConfigPath(Args.LastConfigFile);
+		if isfile(LastPath) then
+			pcall(delfile, LastPath);
+		end;
+	end;
+
+	function Args:RenameConfig(OldName: string, NewName: string)
+		if not IsValidConfigName(OldName) or not IsValidConfigName(NewName) then
+			return false, "invalid config name";
+		end;
+		if OldName == NewName then
+			return true;
+		end;
+
+		local OldPath = ConfigPath(OldName);
+		local NewPath = ConfigPath(NewName);
+		if not isfile(OldPath) then
+			return false, "config not found";
+		end;
+		if isfile(NewPath) then
+			return false, "config already exists";
+		end;
+
+		local WasLastConfig = Args:GetLastConfig() == OldName;
+		local Success, ErrorMessage = pcall(function()
+			local Content = readfile(OldPath);
+			local DecodeSuccess, Data = pcall(HttpService.JSONDecode, HttpService, Content);
+			if DecodeSuccess and type(Data) == "table" and type(Data.__INFORMATION) == "table" then
+				Data.__INFORMATION.Name = NewName;
+				Content = HttpService:JSONEncode(Data);
+			end;
+			writefile(NewPath, Content);
+			delfile(OldPath);
+		end);
+		if not Success then
+			if isfile(NewPath) and isfile(OldPath) then
+				pcall(delfile, NewPath);
+			end;
+			return false, tostring(ErrorMessage);
+		end;
+		if WasLastConfig then
+			Args:SetLastConfig(NewName);
+		end;
+		return true;
 	end;
 
 	function Args:LoadConfig(ConfigName: string)
-		local _path = Compkiller:_Path(Args.Directory,ConfigName);
+		local _path = ConfigPath(ConfigName);
 
 		if isfile(_path) then
 			local info = readfile(_path);
@@ -12301,7 +12544,29 @@ function Compkiller:ConfigManager(ConfigManager: ConfigManager) : ConfigFunction
 					end;
 				end
 			end;
+			Args:SetLastConfig(ConfigName);
+			return true;
 		end;
+		return false;
+	end;
+
+	function Args:LoadLastConfig()
+		local ConfigName = Args:GetLastConfig();
+		if not ConfigName then
+			return false;
+		end;
+		return Args:LoadConfig(ConfigName);
+	end;
+
+	function Args:AutoLoadLastConfig()
+		if Args.AutoLoadAttempted then
+			return false;
+		end;
+		Args.AutoLoadAttempted = true;
+		if not Args.AutoLoad then
+			return false;
+		end;
+		return Args:LoadLastConfig();
 	end;
 
 	return Args;
