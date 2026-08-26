@@ -5490,6 +5490,10 @@ function Compkiller:_LoadElement(Parent: Frame , EnabledLine: boolean , Signal ,
 			Args.AutoKeybind = AutoKeybind;
 		end;
 
+		if Config.Flag then
+			Compkiller:_RegisterFlag(Config.Flag, Args, Block.Root);
+		end;
+
 		return Args;
 	end;
 
@@ -6042,6 +6046,34 @@ function Compkiller:_LoadElement(Parent: Frame , EnabledLine: boolean , Signal ,
 			Callback = function() end
 		});
 
+		local SliderRange = Config.Max - Config.Min;
+		local SliderLower = math.min(Config.Min, Config.Max);
+		local SliderUpper = math.max(Config.Min, Config.Max);
+		local ThumbDiameter = 13;
+
+		local NormalizeValue = function(Value)
+			local NumericValue = tonumber(Value) or Config.Min;
+			NumericValue = math.clamp(NumericValue, SliderLower, SliderUpper);
+			if NumericValue == Config.Min or NumericValue == Config.Max then
+				return NumericValue;
+			end;
+			return math.clamp(Compkiller:_Rounding(NumericValue, Config.Round), SliderLower, SliderUpper);
+		end;
+
+		local ValueToScale = function(Value)
+			if SliderRange == 0 then
+				return 0;
+			end;
+			return math.clamp((NormalizeValue(Value) - Config.Min) / SliderRange, 0, 1);
+		end;
+
+		local ThumbPosition = function(Scale)
+			-- 旋鈕中心在 0/1 時仍留在軌道內，不會被邊界裁切。
+			return UDim2.new(Scale, (0.5 - Scale) * ThumbDiameter, 0.5, 0);
+		end;
+
+		Config.Default = NormalizeValue(Config.Default);
+
 		local Slider = Instance.new("Frame")
 		local BlockText = Instance.new("TextLabel")
 		local BlockLine = Instance.new("Frame")
@@ -6108,7 +6140,7 @@ function Compkiller:_LoadElement(Parent: Frame , EnabledLine: boolean , Signal ,
 		SliderBar.BackgroundColor3 = Compkiller.Colors.DropColor
 		SliderBar.BorderColor3 = Color3.fromRGB(0, 0, 0)
 		SliderBar.BorderSizePixel = 0
-		SliderBar.ClipsDescendants = true
+		SliderBar.ClipsDescendants = false
 		SliderBar.Position = UDim2.new(0.5, 0, 1, -9)
 		SliderBar.Size = UDim2.new(1, -25, 0, 10)
 		SliderBar.ZIndex = Zindex + 3
@@ -6136,7 +6168,7 @@ function Compkiller:_LoadElement(Parent: Frame , EnabledLine: boolean , Signal ,
 		SliderInput.BorderColor3 = Color3.fromRGB(0, 0, 0)
 		SliderInput.BorderSizePixel = 0
 		SliderInput.Position = UDim2.new(0, 0, 0.5, 0)
-		SliderInput.Size = UDim2.new(math.max((Config.Default - Config.Min) / (Config.Max - Config.Min) , 0.045), 0, 1, 0)
+		SliderInput.Size = UDim2.new(ValueToScale(Config.Default), 0, 1, 0)
 		SliderInput.ZIndex = Zindex + 4
 
 		table.insert(Compkiller.Elements.Highlight,{
@@ -6147,12 +6179,12 @@ function Compkiller:_LoadElement(Parent: Frame , EnabledLine: boolean , Signal ,
 		UICorner_2.CornerRadius = UDim.new(0, 6)
 		UICorner_2.Parent = SliderInput
 
-		Frame.Parent = SliderInput
-		Frame.AnchorPoint = Vector2.new(1, 0.5)
+		Frame.Parent = SliderBar
+		Frame.AnchorPoint = Vector2.new(0.5, 0.5)
 		Frame.BackgroundColor3 = Compkiller.Colors.SwitchColor
 		Frame.BorderColor3 = Color3.fromRGB(0, 0, 0)
 		Frame.BorderSizePixel = 0
-		Frame.Position = UDim2.new(1, 5, 0.5, 0)
+		Frame.Position = ThumbPosition(ValueToScale(Config.Default))
 		Frame.Rotation = 45.000
 		Frame.Size = UDim2.new(1, 0, 1, 0)
 		Frame.SizeConstraint = Enum.SizeConstraint.RelativeYY
@@ -6207,6 +6239,7 @@ function Compkiller:_LoadElement(Parent: Frame , EnabledLine: boolean , Signal ,
 		local DragChangedConnection = nil;
 		local DragEndedConnection = nil;
 		local SliderTween = nil;
+		local ThumbTween = nil;
 
 		local StopDragging = function()
 			IsHold = false;
@@ -6221,21 +6254,33 @@ function Compkiller:_LoadElement(Parent: Frame , EnabledLine: boolean , Signal ,
 		end;
 
 		local Update = function(Input)
-			local SizeScale = math.clamp((((Input.Position.X) - SliderBar.AbsolutePosition.X) / SliderBar.AbsoluteSize.X), 0, 1);
+			local HalfThumb = math.min(ThumbDiameter * 0.5, SliderBar.AbsoluteSize.X * 0.5);
+			local TrackStart = SliderBar.AbsolutePosition.X + HalfThumb;
+			local TrackWidth = math.max(SliderBar.AbsoluteSize.X - (HalfThumb * 2), 1);
+			local SizeScale = math.clamp((Input.Position.X - TrackStart) / TrackWidth, 0, 1);
 
 			local Main = ((Config.Max - Config.Min) * SizeScale) + Config.Min;
-
-			local Value = Compkiller:_Rounding(Main,Config.Round);
-
-			local PositionX = UDim2.fromScale(SizeScale, 1);
-
-			local Size = (Value - Config.Min) / (Config.Max - Config.Min);
+			local Value;
+			if SizeScale <= 0 then
+				Value = Config.Min;
+			elseif SizeScale >= 1 then
+				Value = Config.Max;
+			else
+				Value = NormalizeValue(Main);
+			end;
+			local VisualScale = ValueToScale(Value);
 
 			if SliderTween then
 				SliderTween:Cancel();
 			end;
-			SliderTween = Compkiller:_Animation(SliderInput , TweenInfo.new(0.2),{
-				Size = UDim2.new(math.clamp(Size,0.045,1), 0, 1, 0)
+			if ThumbTween then
+				ThumbTween:Cancel();
+			end;
+			SliderTween = Compkiller:_Animation(SliderInput, TweenInfo.new(0.2), {
+				Size = UDim2.new(VisualScale, 0, 1, 0)
+			});
+			ThumbTween = Compkiller:_Animation(Frame, TweenInfo.new(0.2), {
+				Position = ThumbPosition(VisualScale)
 			});
 
 			Config.Default = Value;
@@ -6274,6 +6319,10 @@ function Compkiller:_LoadElement(Parent: Frame , EnabledLine: boolean , Signal ,
 					SliderTween:Cancel();
 					SliderTween = nil;
 				end
+				if ThumbTween then
+					ThumbTween:Cancel();
+					ThumbTween = nil;
+				end
 			end);
 		end;
 
@@ -6282,15 +6331,25 @@ function Compkiller:_LoadElement(Parent: Frame , EnabledLine: boolean , Signal ,
 		Args.Flag = Config.Flag;
 
 		function Args:SetValue(Value)
-			Config.Default = Value;
+			Config.Default = NormalizeValue(Value);
+			local VisualScale = ValueToScale(Config.Default);
 
 			ValueText.Text = tostring(Config.Default)..tostring(Config.Type)
 
-			Compkiller:_Animation(SliderInput, TweenInfo.new(0.35),{
-				Size = UDim2.new(math.max((Config.Default - Config.Min) / (Config.Max - Config.Min) , 0.045), 0, 1, 0)
+			if SliderTween then
+				SliderTween:Cancel();
+			end;
+			if ThumbTween then
+				ThumbTween:Cancel();
+			end;
+			SliderTween = Compkiller:_Animation(SliderInput, TweenInfo.new(0.35),{
+				Size = UDim2.new(VisualScale, 0, 1, 0)
+			});
+			ThumbTween = Compkiller:_Animation(Frame, TweenInfo.new(0.35),{
+				Position = ThumbPosition(VisualScale)
 			});
 
-			Config.Callback(Value);
+			Config.Callback(Config.Default);
 		end;
 
 		function Args:SetText(str : string)
@@ -6303,8 +6362,18 @@ function Compkiller:_LoadElement(Parent: Frame , EnabledLine: boolean , Signal ,
 
 		Args.Signal = Signal:Connect(function(bool)
 			if bool then
-				Compkiller:_Animation(SliderInput, TweenInfo.new(0.35),{
-					Size = UDim2.new(math.max((Config.Default - Config.Min) / (Config.Max - Config.Min) , 0.045), 0, 1, 0)
+				local VisualScale = ValueToScale(Config.Default);
+				if SliderTween then
+					SliderTween:Cancel();
+				end;
+				if ThumbTween then
+					ThumbTween:Cancel();
+				end;
+				SliderTween = Compkiller:_Animation(SliderInput, TweenInfo.new(0.35),{
+					Size = UDim2.new(VisualScale, 0, 1, 0)
+				});
+				ThumbTween = Compkiller:_Animation(Frame, TweenInfo.new(0.35),{
+					Position = ThumbPosition(VisualScale)
 				});
 
 				Compkiller:_Animation(ValueText,Tween,{
@@ -6335,7 +6404,10 @@ function Compkiller:_LoadElement(Parent: Frame , EnabledLine: boolean , Signal ,
 					TextTransparency = 0.1
 				})
 			else
-				Compkiller:_Animation(SliderInput, TweenInfo.new(0.35),{
+				if SliderTween then
+					SliderTween:Cancel();
+				end;
+				SliderTween = Compkiller:_Animation(SliderInput, TweenInfo.new(0.35),{
 					Size = UDim2.new(0, 0, 1, 0)
 				});
 
